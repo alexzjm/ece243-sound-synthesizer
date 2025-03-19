@@ -33,7 +33,7 @@ def convert_img(file_name, img_name, width, height):
     output_code = f"short unsigned int {img_name}[{width * height}] = {{{img_array}}};"
     
     # Generate and append drawing function code
-    output_code += "\n\n" + generate_draw_pixel_code(img_name, width, height)
+    output_code += "\n" + generate_draw_pixel_code(img_name, width, height)
     
     # Copy to clipboard
     pyperclip.copy(output_code)
