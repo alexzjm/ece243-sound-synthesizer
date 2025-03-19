@@ -118,6 +118,15 @@ void erase_image_triangle(int x, int y) {
     }
 }
 
+float wave_data_x[170]; // the x-axis for the wave data
+float wave_data_y[170]; // the y-axis for the wave data
+// int wave_data_plot_x[170]; // we don't need x because it's just a range from 0 to 169
+int wave_data_plot_y[170]; // the y-axis for the wave data to be plotted on the screen
+void init_wave_data_x() {
+    for (int i = 0; i < 170; i++) {
+        wave_data_x[i] = i * 2 * 3.1415926 / 170;
+    }
+}
 
 void draw_main_screen();
 void draw_waveform(int x, int y, int width, int height);
@@ -173,31 +182,6 @@ int main () {
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
     clear_screen(); // pixel_buffer_start points to the pixel buffer
 
-
-    // only draw one line
-    // int x = 0, last_x = 1, last_last_x = 2, dx = -1;
-    // int y = 0, last_y = 1, last_last_y = 2, dy = -1;
-    int x_arr[NUM_BOXES] = {0};
-    int y_arr[NUM_BOXES] = {0};
-    int last_x_arr[NUM_BOXES] = {0};
-    int last_y_arr[NUM_BOXES] = {0};
-    int last_last_x_arr[NUM_BOXES] = {0};
-    int last_last_y_arr[NUM_BOXES] = {0};
-    int dx_arr[NUM_BOXES] = {0};
-    int dy_arr[NUM_BOXES] = {0};
-    // colors
-    short int box_colors[NUM_BOXES] = {0};
-    short int line_colors[NUM_BOXES] = {0};
-    // 初始化
-    for (int i = 0; i < NUM_BOXES; i++) {
-        x_arr[i] = 160 + rand() % 80 * 2 - 80;
-        y_arr[i] = 120 + rand() % 80 * 2 - 80;
-        dx_arr[i] = rand() % 2 * 2 - 1;
-        dy_arr[i] = rand() % 2 * 2 - 1;
-        box_colors[i] = rand() % 0xFFFF;
-        line_colors[i] = rand() % 0xFFFF;
-    }
-
     while (1)
     {
         draw_main_screen();
@@ -217,7 +201,6 @@ void handler (void){
         key_isr();
     // else, ignore the trap
 }
-    
 
 void set_key() {
     volatile int *KEY_ptr = (int *) KEY_BASE;
