@@ -11,22 +11,23 @@ import pyperclip
 # the image is then flattened to a 1D array
 # the image is then copied to the clipboard
 def convert_img(file_name, img_name, width, height):
-    img = cv2.imread(file_name)
-    img = cv2.resize(img, (width, height))
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img_r = img[:, :, 0] >> 3
+    img = cv2.imread(file_name).astype(np.uint16)
+    img = cv2.resize(img, (width, height), interpolation=cv2.INTER_NEAREST)
+    # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img_r = img[:, :, 2] >> 3
     img_g = img[:, :, 1] >> 2
-    img_b = img[:, :, 2] >> 3
+    img_b = img[:, :, 0] >> 3
+    print(img_r[0, 0], img_g[0, 0], img_b[0, 0])
     img = (img_r << 11) + (img_g << 5) + img_b
+    print(img[0, 0])
     img = img.flatten()
-    answer = ', '.join(map(str, img))
+    answer = ', '.join(map(lambda x: f"0x{x:04X}", img))
     answer = f"short unsigned int {img_name}[{width * height}] = {{{answer}}};"
 
     answer += "\n\n"
     answer += generate_draw_pixel_code(img_name, width, height, img_name)
 
     pyperclip.copy(answer)
-    print(answer)
 
 
 # This is the function that generates the plot_image function
@@ -42,6 +43,15 @@ void plot_image_{img_name}(int x, int y) {{
         }}
     }}
 }}
+
+
+void erase_image_{img_name}(int x, int y) {{
+    for (int i = 0; i < {height}; i++) {{
+        for (int j = 0; j < {width}; j++) {{
+            plot_pixel(x + j, y + i, 0);
+        }}
+    }}
+}}
 """
     return code
 
@@ -49,7 +59,7 @@ void plot_image_{img_name}(int x, int y) {{
 if __name__ == '__main__':
     convert_img(
         file_name='images/sine.png',
-        img_name='img_sine',
-        width=20,
-        height=10
+        img_name='sine',
+        width=50,
+        height=20
     )
