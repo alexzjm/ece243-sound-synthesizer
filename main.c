@@ -128,7 +128,7 @@ int main () {
     // colors
     short int box_colors[NUM_BOXES] = {0};
     short int line_colors[NUM_BOXES] = {0};
-    // 初始化
+    // 初始化 (initialization)
     for (int i = 0; i < NUM_BOXES; i++) {
         x_arr[i] = 160 + rand() % 150 * 2 - 150;
         y_arr[i] = 120 + rand() % 120 * 2 - 120;
