@@ -1,10 +1,13 @@
 #include <stdio.h>
+#include <math.h>
 #include <stdbool.h>
 
 #define AUDIO_BASE 0xFF203040
 #define KEY_BASE 0xFF200050
 #define SWITCH_BASE 0xFF200040
 #define PS2_BASE 0xFF200100
+
+#define M_PI 3.14159265358979323846264338327950288419716939937510
 
 typedef struct audio_s {
     volatile unsigned int CTRL;
@@ -31,6 +34,10 @@ void set_ps2();
 void key_isr();
 void ps2_isr();
 
+float sine_wave(float phase);
+float square_wave(float phase);
+float triangle_wave(float phase);
+float saw_wave(float phase);
 
 // VGA related functions & settings
 #define NUM_BOXES 4
@@ -191,6 +198,28 @@ int main () {
     }
 
     return 0;
+}
+
+float sine_wave(float phase) {
+    return sin(phase);
+}
+
+float square_wave(float phase) {
+    return (phase >= M_PI) ? -1 : 1;
+}
+
+float triangle_wave(float phase) {
+    if (phase < M_PI/2) {
+        return 2/M_PI*phase;
+    } else if (phase > M_PI*3/2) {
+        return 2/M_PI*phase - 4;
+    } else {
+        return 2 - 2/M_PI*phase;
+    }
+}
+
+float saw_wave(float phase) {
+    return (phase < M_PI) ? phase/M_PI : phase/M_PI - 2;
 }
 
 void handler (void){
