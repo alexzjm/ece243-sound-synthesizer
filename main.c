@@ -141,6 +141,39 @@ void draw_keybd(int x, int y, int width, int height);
 void draw_adsr(int x, int y, int width, int height);
 void draw_wave_selection(int x, int y, int width, int height);
 
+// sound related functions
+typedef struct wave {
+    float time;
+    float output;
+    float period;
+    char wave_type; // 's' for sine, 't' for triangle, 'q' for square, 'a' for sawtooth
+} wave;
+
+float g_omega;
+
+void update_wave(wave *w) {
+    static float dt = 1.0 / 8000.0;
+    w->time += dt;
+    if (w->time >= w->period) {
+        w->time -= w->period;
+    }
+    float phase = w->time * g_omega;
+    switch (w->wave_type) {
+        case 's':
+            w->output = sine_wave(phase);
+            break;
+        case 't':
+            w->output = triangle_wave(phase);
+            break;
+        case 'q':
+            w->output = square_wave(phase);
+            break;
+        case 'a':
+            w->output = sawtooth_wave(phase);
+            break;
+    }
+}
+
 
 int main () {
 
@@ -382,6 +415,7 @@ void draw_wave_selection(int x, int y, int width, int height) {
 
 void draw_waveform(int x, int y, int width, int height) {
     draw_rect(x, y, width, height, 0xFFFF);
+    // calculate the 
 }
 
 void draw_keybd(int x, int y, int width, int height) {
