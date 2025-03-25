@@ -1,14 +1,16 @@
 #include <stdio.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 
+// Constant definitions
 #define AUDIO_BASE 0xFF203040
 #define KEY_BASE 0xFF200050
 #define SWITCH_BASE 0xFF200040
 #define PS2_BASE 0xFF200100
-
 #define M_PI 3.14159265358979323846264338327950288419716939937510
 
+// Struct definitions
 typedef struct audio_s {
     volatile unsigned int CTRL;
     volatile unsigned char RARC, RALC, WSRC, WSLC;
@@ -28,12 +30,44 @@ typedef struct ps2_port {
     volatile unsigned int CTRL;
 } ps2_port;
 
+typedef struct note_struct {
+    bool pressed;
+    char name[5];
+    uint8_t code;
+    char ps2_key;
+    float frequency;
+} note_struct;
+
+// Global variables
+note_struct notes[20] = {
+    {false, "C4",  0x15, 'Q',  261.63},
+    {false, "C#4", 0x1E, '2',  277.18},
+    {false, "D4",  0x1B, 'W',  293.66},
+    {false, "D#4", 0x1C, '3',  311.13},
+    {false, "E4",  0x23, 'E',  329.63},
+    {false, "F4",  0x2B, 'R',  349.23},
+    {false, "F#4", 0x34, '5',  369.99},
+    {false, "G4",  0x33, 'T',  392.00},
+    {false, "G#4", 0x3B, '6',  415.30},
+    {false, "A4",  0x42, 'Y',  440.00},
+    {false, "A#4", 0x4B, '7',  466.16},
+    {false, "B4",  0x4C, 'U',  493.88},
+    {false, "C5",  0x52, 'I',  523.25},
+    {false, "C#5", 0x5B, '9',  554.37},
+    {false, "D5",  0x4D, 'O',  587.33},
+    {false, "D#5", 0x54, '0',  622.25},
+    {false, "E5",  0x5D, 'P',  659.25},
+    {false, "F5",  0x66, '[',  698.46},
+    {false, "F#5", 0x6E, '=',  739.99},
+    {false, "G5",  0x75, ']',  783.99}
+};
+
+// Function declarations
 static void handler(void) __attribute__ ((interrupt ("machine")));
 void set_key();
 void set_ps2();
 void key_isr();
 void ps2_isr();
-
 float sine_wave(float phase);
 float square_wave(float phase);
 float triangle_wave(float phase);
@@ -203,7 +237,7 @@ int main () {
     __asm__ volatile ("csrs mie, %0" :: "r"(mie_value)); // set interrupt enables
     __asm__ volatile ("csrs mstatus, %0" :: "r"(mstatus_value)); // enable Nios V interrupts
 
-    printf("setup interrupts\n");
+    printf("finished setting up interrupts\n");
 
 
     // VGA related codes
@@ -231,6 +265,31 @@ int main () {
         wait_for_vsync(); // swap front and back buffers on VGA vertical sync
         pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
 
+        unsigned int data = ps2_ptr->DATA;
+        if ((data & 0x8000) != 0) {
+            bool break_code = false;
+            uint8_t code = data & 0xFF;
+            printf("Hex: 0x%02X\n", code);
+
+            // Check if break code
+            if (code == 0xF0) { 
+                data = ps2_ptr->DATA;
+                code = data & 0xFF;
+                break_code = true;
+                printf("breakcode detected\n");
+            }
+
+            for (int idx = 0; idx < 20; idx++) {
+                if (code == notes[idx].code) {
+                    notes[idx].pressed = break_code ? false : true;
+
+                    printf("note represent by %c is now %d\n", notes[idx].ps2_key, notes[idx].pressed);
+                    // !!! maybe play notes here
+                }
+            }
+
+        }
+        
         
     }
 
@@ -265,8 +324,6 @@ void handler (void){
     __asm__ volatile ("csrr %0, mcause" : "=r"(mcause_value));
     if (mcause_value == 0x80000012) // KEY port
         key_isr();
-    else if (mcause_value == 0x80000016) // PS2 Port
-        ps2_isr();
     // else, ignore the trap
 }
 
@@ -304,6 +361,8 @@ void key_isr() {
     int sw_state = *(sw_ptr);
     int key_pressed = *(key_ptr + 3); // read EdgeCapture
     key_pressed &= 0xF;
+
+    printf("The key pressed is %d", key_pressed);
 
     if ((sw_state & 0x1) == 0x1) {
         printf("addition mode code goes here\n");
