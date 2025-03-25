@@ -37,7 +37,7 @@ void ps2_isr();
 float sine_wave(float phase);
 float square_wave(float phase);
 float triangle_wave(float phase);
-float saw_wave(float phase);
+float sawtooth_wave(float phase);
 
 // VGA related functions & settings
 #define NUM_BOXES 4
@@ -183,7 +183,9 @@ int main () {
     ps2_port *ps2_ptr = (ps2_port *)PS2_BASE;
 
     // Setup I/O devices to handle interrupts
+    printf("setting up io devices\n");
     set_key();
+    set_ps2();
 
     // Setup Control Registers to handle interrupts
     int mstatus_value, mtvec_value, mie_value;
@@ -228,6 +230,8 @@ int main () {
 
         wait_for_vsync(); // swap front and back buffers on VGA vertical sync
         pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+
+        
     }
 
     return 0;
@@ -251,7 +255,7 @@ float triangle_wave(float phase) {
     }
 }
 
-float saw_wave(float phase) {
+float sawtooth_wave(float phase) {
     return (phase < M_PI) ? phase/M_PI : phase/M_PI - 2;
 }
 
@@ -261,6 +265,8 @@ void handler (void){
     __asm__ volatile ("csrr %0, mcause" : "=r"(mcause_value));
     if (mcause_value == 0x80000012) // KEY port
         key_isr();
+    else if (mcause_value == 0x80000016) // PS2 Port
+        ps2_isr();
     // else, ignore the trap
 }
 
@@ -268,6 +274,26 @@ void set_key() {
     volatile int *KEY_ptr = (int *) KEY_BASE;
     *(KEY_ptr + 3) = 0xF; // clear EdgeCapture register
     *(KEY_ptr + 2) = 0xF; // enable interrupts for all KEYs
+}
+
+void set_ps2() {
+    
+    printf("inside set ps2\n");
+    ps2_port *ps2_ptr = (ps2_port *)PS2_BASE;
+    printf("RI bit after ISR: %d\n", (ps2_ptr->CTRL >> 1) & 1);
+
+    unsigned int data = ps2_ptr->DATA;
+    printf("%d%d\n", (data>>16)&0xFF, data>>24&0xFF);
+
+    
+    printf("%d\n", (data & 0x8000) >> 15);
+    while ((data & 0x8000) != 0) {
+        data = ps2_ptr->DATA;
+        printf("word removed\n");
+    }
+
+    ps2_ptr->CTRL |= 0x1;
+    printf("RI bit after ISR: %d\n", (ps2_ptr->CTRL >> 1) & 1);
 }
 
 void key_isr() {
@@ -294,6 +320,14 @@ void key_isr() {
     } 
 
     *(key_ptr + 3) = 0xF; // clear EdgeCapture register
+}
+
+void ps2_isr() {
+    printf("inside ps2 isr\n");
+    ps2_port *ps2_ptr = (ps2_port *)PS2_BASE;
+
+    unsigned char data = ps2_ptr->DATA & 0xFF;
+    //printf(data);
 }
 
 // VGA related functions
