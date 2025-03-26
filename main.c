@@ -9,6 +9,10 @@
 #define SWITCH_BASE 0xFF200040
 #define PS2_BASE 0xFF200100
 #define M_PI 3.14159265358979323846264338327950288419716939937510
+#define SIN_IDX 0
+#define SQR_IDX 1
+#define TRI_IDX 2
+#define SAW_IDX 3
 
 // Struct definitions
 typedef struct audio_s {
@@ -70,6 +74,9 @@ note_struct notes[20] = {
     {false, "F#5", 0x55, '=',  739.99, 1, {{255, 175, 10, 40}, {0, 0, 0, 0}}},          // F#5: Black key
     {false, "G5",  0x5B, ']',  783.99, 2, {{265, 175, 15, 40}, {260, 215, 20, 20}}}     // G5: White and Black key
 };
+
+// 0: sine, 1: square, 2: triangle, 3: sawtooth
+int current_waves[0] = {0};
 
 // Function declarations
 static void handler(void) __attribute__ ((interrupt ("machine")));
@@ -369,12 +376,30 @@ void key_isr() {
     int key_pressed = *(key_ptr + 3); // read EdgeCapture
     key_pressed &= 0xF;
 
-    printf("The key pressed is %d", key_pressed);
+    printf("The key pressed is %d\n", key_pressed);
 
     if ((sw_state & 0x1) == 0x1) {
         printf("addition mode code goes here\n");
+        if (key_pressed == 1) {
+            current_waves[SAW_IDX] += 1;
+        } else if (key_pressed == 2) {
+            current_waves[TRI_IDX] += 1;
+        } else if (key_pressed == 4) {
+            current_waves[SQR_IDX] += 1;
+        } else if (key_pressed == 8) {
+            current_waves[SIN_IDX] += 1;
+        }
     } else if (((sw_state >> 1) & 0x1) == 0x1) {
         printf("subtraction mode code goes here\n");
+        if (key_pressed == 1) {
+            current_waves[SAW_IDX] -= 1;
+        } else if (key_pressed == 2) {
+            current_waves[TRI_IDX] -= 1;
+        } else if (key_pressed == 4) {
+            current_waves[SQR_IDX] -= 1;
+        } else if (key_pressed == 8) {
+            current_waves[SIN_IDX] -= 1;
+        }
     } else if (((sw_state >> 2) & 0x1) == 0x1) {
         printf("attack\n");
     } else if (((sw_state >> 3) & 0x1) == 0x1) {
@@ -383,18 +408,33 @@ void key_isr() {
         printf("sustain\n");
     } else if (((sw_state >> 5) & 0x1) == 0x1) {
         printf("release\n");
-    } 
+    } else {
+        // If no specific mode is selected, then the selected waveform overwrites previous
+        int probe_key_pressed = 1;
+        for (int idx = 0; idx < 4; idx++) {
+            // if waveform is selected, reset to 1, else, reset to 0
+            current_waves[4-1-idx] = (probe_key_pressed == key_pressed) ? 1 : 0;
+            probe_key_pressed *= 2;
+        }
+
+    }
+
+    for (int i = 0; i < 4; i++) {
+        printf("%d ", current_waves[i]);
+    }
+    printf("\n");
 
     *(key_ptr + 3) = 0xF; // clear EdgeCapture register
 }
 
-void ps2_isr() {
+// dont need anymore
+/*void ps2_isr() {
     printf("inside ps2 isr\n");
     ps2_port *ps2_ptr = (ps2_port *)PS2_BASE;
 
     unsigned char data = ps2_ptr->DATA & 0xFF;
     //printf(data);
-}
+}*/
 
 // VGA related functions
 void update_x_y(int* x, int* y, int* last_x, int* last_y, int* last_last_x, int* last_last_y, int* dx, int* dy) {
