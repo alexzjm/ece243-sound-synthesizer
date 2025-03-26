@@ -87,15 +87,11 @@ note_struct notes[20] = {
     {false, "G5",  0x5B, ']',  783.99, 2, {{265, 175, 15, 40}, {260, 215, 20, 20}}}     // G5: White and Black key
 };
 
-// 0: sine, 1: square, 2: triangle, 3: sawtooth
-int current_waves[4] = {0};
-
 // Function declarations
 static void handler(void) __attribute__ ((interrupt ("machine")));
 void set_key();
 void set_ps2();
 void key_isr();
-void timer_isr();
 void ps2_isr();
 float sine_wave(float phase);
 float square_wave(float phase);
@@ -131,16 +127,44 @@ void init_wave_data_x() {
     }
 }
 
+// 0: sine, 1: square, 2: triangle, 3: sawtooth
+int current_waves[4] = {0};
+
 // sound related functions
 typedef struct wave {
     float time;
     float output;
+    float omega;
     float period;
-    char wave_type; // 's' for sine, 't' for triangle, 'q' for square, 'a' for sawtooth
+    bool is_playing;
 } wave;
 
-float g_omega;
+wave waves[20] = {
+    {0, 0, 2 * M_PI * 261.63, 1 / 261.63, false}, // C4
+    {0, 0, 2 * M_PI * 277.18, 1 / 277.18, false}, // C#4
+    {0, 0, 2 * M_PI * 293.66, 1 / 293.66, false}, // D4
+    {0, 0, 2 * M_PI * 311.13, 1 / 311.13, false}, // D#4
+    {0, 0, 2 * M_PI * 329.63, 1 / 329.63, false}, // E4
+    {0, 0, 2 * M_PI * 349.23, 1 / 349.23, false}, // F4
+    {0, 0, 2 * M_PI * 369.99, 1 / 369.99, false}, // F#4
+    {0, 0, 2 * M_PI * 392.00, 1 / 392.00, false}, // G4
+    {0, 0, 2 * M_PI * 415.30, 1 / 415.30, false}, // G#4
+    {0, 0, 2 * M_PI * 440.00, 1 / 440.00, false}, // A4
+    {0, 0, 2 * M_PI * 466.16, 1 / 466.16, false}, // A#4
+    {0, 0, 2 * M_PI * 493.88, 1 / 493.88, false}, // B4
+    {0, 0, 2 * M_PI * 523.25, 1 / 523.25, false}, // C5
+    {0, 0, 2 * M_PI * 554.37, 1 / 554.37, false}, // C#5
+    {0, 0, 2 * M_PI * 587.33, 1 / 587.33, false}, // D5
+    {0, 0, 2 * M_PI * 622.25, 1 / 622.25, false}, // D#5
+    {0, 0, 2 * M_PI * 659.25, 1 / 659.25, false}, // E5
+    {0, 0, 2 * M_PI * 698.46, 1 / 698.46, false}, // F5
+    {0, 0, 2 * M_PI * 739.99, 1 / 739.99, false}, // F#5
+    {0, 0, 2 * M_PI * 783.99, 1 / 783.99, false}  // G5
+};
 
+bool g_update_canvas = true; // flag to update the canvas
+
+void update_all_waves();
 void update_wave(wave *w);
 
 #pragma endregion
@@ -277,9 +301,47 @@ int main () {
 
     while (1)
     {
-        draw_main_screen();
-        wait_for_vsync(); // swap front and back buffers on VGA vertical sync
-        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+        unsigned int data = ps2_ptr->DATA;
+        if ((data & 0x8000) != 0) {
+            bool break_code = false;
+            uint8_t code = data & 0xFF;
+            printf("Hex: 0x%02X\n", code);
+
+            // Check if break code
+            if (code == 0xF0) {
+                data = ps2_ptr->DATA;
+                code = data & 0xFF;
+                break_code = true;
+                printf("breakcode detected\n");
+            }
+
+            for (int idx = 0; idx < 20; idx++) {
+                if (code == notes[idx].code) {
+                    notes[idx].pressed = break_code ? false : true;
+
+                    printf("note represent by %c is now %d\n", notes[idx].ps2_key, notes[idx].pressed);
+                    // !!! maybe play notes here
+                }
+            }
+
+        }
+
+        // check and update the audio FIFO
+        audio_s *audio_ptr = (audio_s *)AUDIO_BASE;
+
+        // check and update the audio FIFO
+        bool status = audio_ptr->RALC; // true if there is space in the FIFO
+        if (status) {
+            // input some random data
+            audio_ptr->LDATA = 0x7FFF;
+            audio_ptr->RDATA = 0x7FFF;
+            update_all_waves();
+        }
+
+        
+        // draw_main_screen();
+        // wait_for_vsync(); // swap front and back buffers on VGA vertical sync
+        // pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     }
 
     return 0;
@@ -317,8 +379,6 @@ void handler (void){
     __asm__ volatile ("csrr %0, mcause" : "=r"(mcause_value));
     if (mcause_value == 0x80000012) // KEY port
         key_isr();
-    else if (mcause_value == 0x80000010) // Timer
-        timer_isr();
     else if (mcause_value == 0x80000016) // PS2
         ps2_isr();
     // else, ignore the trap
@@ -328,18 +388,6 @@ void set_key() {
     volatile int *KEY_ptr = (int *) KEY_BASE;
     *(KEY_ptr + 3) = 0xF; // clear EdgeCapture register
     *(KEY_ptr + 2) = 0xF; // enable interrupts for all KEYs
-}
-
-void set_timer() {
-    timer_s *timer = (timer_s *)TIMER_BASE;
-    // stop the timer
-    timer->CONTROL = 0x8;
-    // set the timer duration
-    unsigned int counter_start = 100; // 0.0001 second
-    timer->START_LOW = (short unsigned int) counter_start;
-    timer->START_HIGH = (short unsigned int) (counter_start >> 16);
-    // start the timer
-    timer->CONTROL = 0x7;
 }
 
 void set_ps2() {
@@ -422,29 +470,6 @@ void key_isr() {
     *(key_ptr + 3) = 0xF; // clear EdgeCapture register
 }
 
-void timer_isr() {
-    // printf("inside timer isr\n");
-
-    timer_s *timer = (timer_s *)TIMER_BASE;
-    audio_s *audio_ptr = (audio_s *)AUDIO_BASE;
-
-    // put down the flag
-    timer->STATUS = 0x0;
-
-    // check and update the audio FIFO
-    bool status = audio_ptr->RALC; // true if there is space in the FIFO
-    if (!status) {
-        return;
-    }
-
-    // input some random data
-    // audio_ptr->LDATA = rand();
-    // audio_ptr->RDATA = rand();
-    audio_ptr->LDATA = 0x7FFF;
-    audio_ptr->RDATA = 0x7FFF;
-
-}
-
 void ps2_isr() {
     printf("inside ps2 isr\n");
     ps2_port *ps2_ptr = (ps2_port *)PS2_BASE;
@@ -476,26 +501,34 @@ void ps2_isr() {
     //printf(data);
 }
 
+void update_all_waves() {
+    for (int i=0; i<20; i++) {
+        update_wave(&waves[i]);
+    }
+}
+
 void update_wave(wave *w) {
     static float dt = 1.0 / 8000.0;
     w->time += dt;
     if (w->time >= w->period) {
         w->time -= w->period;
     }
-    float phase = w->time * g_omega;
-    switch (w->wave_type) {
-        case 's':
-            w->output = sine_wave(phase);
-            break;
-        case 't':
-            w->output = triangle_wave(phase);
-            break;
-        case 'q':
-            w->output = square_wave(phase);
-            break;
-        case 'a':
-            w->output = sawtooth_wave(phase);
-            break;
+    float phase = w->time * w->omega;
+    
+    w->output = 0;
+    for (int i=0; i<4; i++) {
+        if (current_waves[0]) {
+            w->output += sine_wave(phase);
+        }
+        if (current_waves[1]) {
+            w->output += square_wave(phase);
+        }
+        if (current_waves[2]) {
+            w->output += triangle_wave(phase);
+        }
+        if (current_waves[3]) {
+            w->output += sawtooth_wave(phase);
+        }
     }
 }
 
