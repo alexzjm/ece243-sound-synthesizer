@@ -3,10 +3,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#pragma region Global Vars
+
 // Constant definitions
 #define AUDIO_BASE 0xFF203040
 #define KEY_BASE 0xFF200050
 #define SWITCH_BASE 0xFF200040
+#define TIMER_BASE 0xFF202000
 #define PS2_BASE 0xFF200100
 #define M_PI 3.14159265358979323846264338327950288419716939937510
 #define SIN_IDX 0
@@ -33,6 +36,15 @@ typedef struct ps2_port {
     volatile unsigned int DATA;
     volatile unsigned int CTRL;
 } ps2_port;
+
+typedef struct timer_s {
+    volatile unsigned int STATUS;
+    volatile unsigned int CONTROL;
+    volatile unsigned int START_LOW;
+    volatile unsigned int START_HIGH;
+    volatile unsigned int SNAP_SHOT_LOW;
+    volatile unsigned int SNAP_SHOT_HIGH;
+} timer_s;
 
 typedef struct rectangle {
     int x_base;
@@ -83,6 +95,7 @@ static void handler(void) __attribute__ ((interrupt ("machine")));
 void set_key();
 void set_ps2();
 void key_isr();
+void timer_isr();
 void ps2_isr();
 float sine_wave(float phase);
 float square_wave(float phase);
@@ -129,6 +142,8 @@ typedef struct wave {
 float g_omega;
 
 void update_wave(wave *w);
+
+#pragma endregion
 
 #pragma region Images
 
@@ -206,7 +221,11 @@ void erase_image_triangle(int x, int y) {
 
 #pragma endregion
 
+#pragma region Main
+
 int main () {
+
+    #pragma region Init
 
     audio_s *audio_ptr = (audio_s *)AUDIO_BASE;
     parallel_port *key_ptr = (parallel_port *)KEY_BASE;
@@ -231,6 +250,7 @@ int main () {
     __asm__ volatile ("csrc mie, %0" :: "r"(mie_value));
 
     mie_value = 0x40000; // KEY interrupts
+    mie_value |= 0x10000; // Timer interrupts
     __asm__ volatile ("csrs mie, %0" :: "r"(mie_value)); // set interrupt enables
     __asm__ volatile ("csrs mstatus, %0" :: "r"(mstatus_value)); // enable Nios V interrupts
 
@@ -239,9 +259,6 @@ int main () {
 
     // VGA related codes
     volatile int * pixel_ctrl_ptr = (int *)0xFF203020;
-    // declare other variables(not shown)
-    // initialize location and direction of rectangles(not shown)
-
     /* set front pixel buffer to Buffer 1 */
     *(pixel_ctrl_ptr + 1) = (int) &Buffer1; // first store the address in the  back buffer
     /* now, swap the front/back buffers, to set the front buffer location */
@@ -254,6 +271,12 @@ int main () {
     *(pixel_ctrl_ptr + 1) = (int) &Buffer2;
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
     clear_screen(); // pixel_buffer_start points to the pixel buffer
+
+    // Audio related codes
+    audio_ptr->CTRL = 0x8; // clear the output FIFOs
+    audio_ptr->CTRL = 0x0; // resume input conversion
+
+    #pragma endregion
 
     while (1)
     {
@@ -290,6 +313,10 @@ int main () {
     return 0;
 }
 
+#pragma endregion
+
+#pragma region Interrupts
+
 float sine_wave(float phase) {
     return sin(phase);
 }
@@ -313,11 +340,13 @@ float sawtooth_wave(float phase) {
 }
 
 void handler (void){
-    printf("inside handler\n");
+    // printf("inside handler\n");
     int mcause_value;
     __asm__ volatile ("csrr %0, mcause" : "=r"(mcause_value));
     if (mcause_value == 0x80000012) // KEY port
         key_isr();
+    else if (mcause_value == 0x80000010) // Timer
+        timer_isr();
     // else, ignore the trap
 }
 
@@ -325,6 +354,18 @@ void set_key() {
     volatile int *KEY_ptr = (int *) KEY_BASE;
     *(KEY_ptr + 3) = 0xF; // clear EdgeCapture register
     *(KEY_ptr + 2) = 0xF; // enable interrupts for all KEYs
+}
+
+void set_timer() {
+    timer_s *timer = (timer_s *)TIMER_BASE;
+    // stop the timer
+    timer->CONTROL = 0x8;
+    // set the timer duration
+    unsigned int counter_start = 100; // 0.0001 second
+    timer->START_LOW = (short unsigned int) counter_start;
+    timer->START_HIGH = (short unsigned int) (counter_start >> 16);
+    // start the timer
+    timer->CONTROL = 0x7;
 }
 
 void set_ps2() {
@@ -407,6 +448,29 @@ void key_isr() {
     *(key_ptr + 3) = 0xF; // clear EdgeCapture register
 }
 
+void timer_isr() {
+    // printf("inside timer isr\n");
+
+    timer_s *timer = (timer_s *)TIMER_BASE;
+    audio_s *audio_ptr = (audio_s *)AUDIO_BASE;
+
+    // put down the flag
+    timer->STATUS = 0x0;
+
+    // check and update the audio FIFO
+    bool status = audio_ptr->RALC; // true if there is space in the FIFO
+    if (!status) {
+        return;
+    }
+
+    // input some random data
+    // audio_ptr->LDATA = rand();
+    // audio_ptr->RDATA = rand();
+    audio_ptr->LDATA = 0x7FFF;
+    audio_ptr->RDATA = 0x7FFF;
+
+}
+
 // dont need anymore
 /*void ps2_isr() {
     printf("inside ps2 isr\n");
@@ -438,6 +502,8 @@ void update_wave(wave *w) {
             break;
     }
 }
+
+#pragma endregion
 
 #pragma region VGA Helper
 
