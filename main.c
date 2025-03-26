@@ -88,7 +88,7 @@ note_struct notes[20] = {
 };
 
 // 0: sine, 1: square, 2: triangle, 3: sawtooth
-int current_waves[0] = {0};
+int current_waves[4] = {0};
 
 // Function declarations
 static void handler(void) __attribute__ ((interrupt ("machine")));
@@ -247,8 +247,9 @@ int main () {
     __asm__ volatile ("csrr %0, mie" : "=r"(mie_value));
     __asm__ volatile ("csrc mie, %0" :: "r"(mie_value));
 
-    mie_value = 0x40000; // KEY interrupts
-    mie_value |= 0x10000; // Timer interrupts
+    mie_value = 0x40000; // KEY interrupts IRQ14
+    //mie_value |= 0x10000; // Timer interrupts IRQ16
+    mie_value |= 0x400000; // PS2 interrupts IRQ22
     __asm__ volatile ("csrs mie, %0" :: "r"(mie_value)); // set interrupt enables
     __asm__ volatile ("csrs mstatus, %0" :: "r"(mstatus_value)); // enable Nios V interrupts
 
@@ -276,32 +277,7 @@ int main () {
 
     while (1)
     {
-        unsigned int data = ps2_ptr->DATA;
-        if ((data & 0x8000) != 0) {
-            bool break_code = false;
-            uint8_t code = data & 0xFF;
-            printf("Hex: 0x%02X\n", code);
-
-            // Check if break code
-            if (code == 0xF0) { 
-                data = ps2_ptr->DATA;
-                code = data & 0xFF;
-                break_code = true;
-                printf("breakcode detected\n");
-            }
-
-            for (int idx = 0; idx < 20; idx++) {
-                if (code == notes[idx].code) {
-                    notes[idx].pressed = break_code ? false : true;
-
-                    printf("note represent by %c is now %d\n", notes[idx].ps2_key, notes[idx].pressed);
-                    // !!! maybe play notes here
-                }
-            }
-
-        }
-        
-        // draw_main_screen();
+        draw_main_screen();
         wait_for_vsync(); // swap front and back buffers on VGA vertical sync
         pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     }
@@ -336,13 +312,15 @@ float sawtooth_wave(float phase) {
 }
 
 void handler (void){
-    // printf("inside handler\n");
+    printf("inside handler\n");
     int mcause_value;
     __asm__ volatile ("csrr %0, mcause" : "=r"(mcause_value));
     if (mcause_value == 0x80000012) // KEY port
         key_isr();
     else if (mcause_value == 0x80000010) // Timer
         timer_isr();
+    else if (mcause_value == 0x80000016) // PS2
+        ps2_isr();
     // else, ignore the trap
 }
 
@@ -467,14 +445,36 @@ void timer_isr() {
 
 }
 
-// dont need anymore
-/*void ps2_isr() {
+void ps2_isr() {
     printf("inside ps2 isr\n");
     ps2_port *ps2_ptr = (ps2_port *)PS2_BASE;
 
-    unsigned char data = ps2_ptr->DATA & 0xFF;
+    unsigned int data = ps2_ptr->DATA;
+    if ((data & 0x8000) != 0) {
+        bool break_code = false;
+        uint8_t code = data & 0xFF;
+        printf("Hex: 0x%02X\n", code);
+
+        // Check if break code
+        if (code == 0xF0) { 
+            data = ps2_ptr->DATA;
+            code = data & 0xFF;
+            break_code = true;
+            printf("breakcode detected\n");
+        }
+
+        for (int idx = 0; idx < 20; idx++) {
+            if (code == notes[idx].code) {
+                notes[idx].pressed = break_code ? false : true;
+
+                printf("note represent by %c is now %d\n", notes[idx].ps2_key, notes[idx].pressed);
+                // !!! maybe play notes here
+            }
+        }
+
+    }
     //printf(data);
-}*/
+}
 
 void update_wave(wave *w) {
     static float dt = 1.0 / 8000.0;
