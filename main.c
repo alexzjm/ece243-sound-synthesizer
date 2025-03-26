@@ -225,8 +225,6 @@ void erase_image_triangle(int x, int y) {
 
 int main () {
 
-    #pragma region Init
-
     audio_s *audio_ptr = (audio_s *)AUDIO_BASE;
     parallel_port *key_ptr = (parallel_port *)KEY_BASE;
     parallel_port *sw_ptr = (parallel_port *)SWITCH_BASE;
@@ -276,8 +274,6 @@ int main () {
     audio_ptr->CTRL = 0x8; // clear the output FIFOs
     audio_ptr->CTRL = 0x0; // resume input conversion
 
-    #pragma endregion
-
     while (1)
     {
         unsigned int data = ps2_ptr->DATA;
@@ -305,7 +301,7 @@ int main () {
 
         }
         
-        draw_main_screen();
+        // draw_main_screen();
         wait_for_vsync(); // swap front and back buffers on VGA vertical sync
         pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     }
