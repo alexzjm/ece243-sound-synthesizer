@@ -101,7 +101,6 @@ float sawtooth_wave(float phase);
 // VGA related functions & settings
 volatile int pixel_buffer_start; // global variable
 short int Buffer1[240][512]; // 240 rows, 512 (320 + padding) columns (first buffer)
-short int Buffer2[240][512]; // 240 rows, 512 (320 + padding) columns (second buffer)
 void clear_screen();
 void draw_line(int x0, int y0, int x1, int y1, short int line_color);
 void plot_pixel(int x, int y, short int line_color);
@@ -128,7 +127,7 @@ void init_wave_data_x() {
 }
 
 // 0: sine, 1: square, 2: triangle, 3: sawtooth
-int current_waves[4] = {0};
+int current_waves[4] = {1, 0, 0, 0}; // the current wave selected for each note
 
 // sound related functions
 typedef struct wave {
@@ -166,6 +165,8 @@ bool g_update_canvas = true; // flag to update the canvas
 
 void update_all_waves();
 void update_wave(wave *w);
+uint32_t get_all_waves_output();
+float get_wave_output(wave *w);
 
 #pragma endregion
 
@@ -291,7 +292,7 @@ int main () {
     clear_screen(); // pixel_buffer_start points to the pixel buffer
 
     /* set back pixel buffer to Buffer 2 */
-    *(pixel_ctrl_ptr + 1) = (int) &Buffer2;
+    *(pixel_ctrl_ptr + 1) = (int) &Buffer1;
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
     clear_screen(); // pixel_buffer_start points to the pixel buffer
 
@@ -301,47 +302,25 @@ int main () {
 
     while (1)
     {
-        unsigned int data = ps2_ptr->DATA;
-        if ((data & 0x8000) != 0) {
-            bool break_code = false;
-            uint8_t code = data & 0xFF;
-            printf("Hex: 0x%02X\n", code);
-
-            // Check if break code
-            if (code == 0xF0) {
-                data = ps2_ptr->DATA;
-                code = data & 0xFF;
-                break_code = true;
-                printf("breakcode detected\n");
-            }
-
-            for (int idx = 0; idx < 20; idx++) {
-                if (code == notes[idx].code) {
-                    notes[idx].pressed = break_code ? false : true;
-
-                    printf("note represent by %c is now %d\n", notes[idx].ps2_key, notes[idx].pressed);
-                    // !!! maybe play notes here
-                }
-            }
-
-        }
 
         // check and update the audio FIFO
-        audio_s *audio_ptr = (audio_s *)AUDIO_BASE;
-
-        // check and update the audio FIFO
-        bool status = audio_ptr->RALC; // true if there is space in the FIFO
-        if (status) {
+        bool status = audio_ptr->RALC == 0 || audio_ptr->WSLC == 0;
+        // while (audio_ptr->RALC == 0 || audio_ptr->WSLC == 0);
+        if (!status) {
             // input some random data
-            audio_ptr->LDATA = 0x7FFF;
-            audio_ptr->RDATA = 0x7FFF;
             update_all_waves();
+            uint32_t output = get_all_waves_output();
+            audio_ptr->LDATA = (int) output;
+            audio_ptr->RDATA = (int) output;
+            printf("output: 0x%X\n", output);
         }
-
         
+        if (g_update_canvas) {
+            draw_main_screen();
+            g_update_canvas = false;
+        }
         // draw_main_screen();
-        // wait_for_vsync(); // swap front and back buffers on VGA vertical sync
-        // pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
+
     }
 
     return 0;
@@ -382,6 +361,7 @@ void handler (void){
     else if (mcause_value == 0x80000016) // PS2
         ps2_isr();
     // else, ignore the trap
+    g_update_canvas = true;
 }
 
 void set_key() {
@@ -491,6 +471,7 @@ void ps2_isr() {
         for (int idx = 0; idx < 20; idx++) {
             if (code == notes[idx].code) {
                 notes[idx].pressed = break_code ? false : true;
+                waves[idx].is_playing = notes[idx].pressed;
 
                 printf("note represent by %c is now %d\n", notes[idx].ps2_key, notes[idx].pressed);
                 // !!! maybe play notes here
@@ -508,6 +489,10 @@ void update_all_waves() {
 }
 
 void update_wave(wave *w) {
+    if (!w->is_playing) {
+        return;
+    }
+
     static float dt = 1.0 / 8000.0;
     w->time += dt;
     if (w->time >= w->period) {
@@ -530,6 +515,21 @@ void update_wave(wave *w) {
             w->output += sawtooth_wave(phase);
         }
     }
+}
+
+uint32_t get_all_waves_output() {
+    float temp_output = 0;
+    for (int i=0; i<20; i++) {
+        temp_output += get_wave_output(&waves[i]);
+    }
+
+    uint32_t output = (uint32_t) (temp_output * 0x7FFFFFF + 0x7FFFFFF);
+
+    return output;
+}
+
+float get_wave_output(wave *w) {
+    return w->output;
 }
 
 #pragma endregion
