@@ -87,6 +87,12 @@ note_struct notes[20] = {
     {false, "G5",  0x5B, ']',  783.99, 2, {{265, 175, 15, 40}, {260, 215, 20, 20}}}     // G5: White and Black key
 };
 
+double attack_val = 1;
+double delay_val = 0.5;
+double sustain_val = 1;
+double release_val = 0;
+bool fast_knob_change = true;
+
 // Function declarations
 static void handler(void) __attribute__ ((interrupt ("machine")));
 void set_key();
@@ -109,11 +115,13 @@ void wait_for_vsync();
 void draw_box(int x, int y, short int box_color);
 void update_x_y(int* x, int* y, int* last_x, int* last_y, int* last_last_x, int* last_last_y, int* dx, int* dy);
 void draw_rect(int x, int y, int width, int height, short int color);
+void fill_rect(rectangle rect, short int color);
+void fill_rect_noinit(int x_base, int y_base, int width, int height, short int color);
 short int rgb_to_16bit(int r, int g, int b);
 void draw_main_screen();
 void draw_waveform(int x, int y, int width, int height);
-void draw_keybd(int x, int y, int width, int height);
-void draw_adsr(int x, int y, int width, int height);
+void draw_keybd();
+void draw_adsr();
 void draw_wave_selection(int x, int y, int width, int height);
 
 float wave_data_x[170]; // the x-axis for the wave data
@@ -584,7 +592,7 @@ void plot_pixel(int x, int y, short int line_color)
 void clear_screen() {
     for (int x = 0; x < 320; x++) {
         for (int y = 0; y < 240; y++) {
-            plot_pixel(x, y, 0x3333);
+            plot_pixel(x, y, rgb_to_16bit(40, 40, 40));
         }
     }
 }
@@ -664,6 +672,11 @@ void fill_rect(rectangle rect, short int color) {
     }
 }
 
+void fill_rect_noinit(int x_base, int y_base, int width, int height, short int color){
+    rectangle temp_rect = {x_base, y_base, width, height};
+    fill_rect(temp_rect, color);
+}
+
 #pragma endregion
 
 #pragma region Drawing
@@ -722,29 +735,51 @@ void draw_waveform(int x, int y, int width, int height) {
     }
 }
 
-void draw_keybd(int x, int y, int width, int height) {
+void draw_keybd() {
     //fill_rect(x, y, width, height, 0xFFFF);
     for (int note_idx = 0; note_idx < 20; note_idx++) {
         for (int rect_idx = 0; rect_idx < notes[note_idx].num_rects; rect_idx++) {
             if (notes[note_idx].pressed) {
                 fill_rect(notes[note_idx].rectangles[rect_idx], rgb_to_16bit(255, 182, 80));
             } else {
-                fill_rect(notes[note_idx].rectangles[rect_idx], (notes[note_idx].num_rects == 1) ? 0x0000 : 0xFFFF);
+                fill_rect(notes[note_idx].rectangles[rect_idx], (notes[note_idx].num_rects == 1) ? rgb_to_16bit(0, 0, 0) : rgb_to_16bit(255, 255, 255));
             }
         }
     }
 }
 
-void draw_adsr(int x, int y, int width, int height) {
-    draw_rect(x, y, width, height, 0xFFFF);
+void draw_adsr() {
+    const int shadow_disp = 5;
+    const int knob_min = 145;
+    const int knob_len = 70;
+
+    // Drawing bases
+    fill_rect_noinit(46, 75, 8, 75, rgb_to_16bit(0, 0, 0)); // Attack
+    fill_rect_noinit(66, 75, 8, 75, rgb_to_16bit(0, 0, 0)); // Delay
+    fill_rect_noinit(246, 75, 8, 75, rgb_to_16bit(0, 0, 0)); // Sustain
+    fill_rect_noinit(266, 75, 8, 75, rgb_to_16bit(0, 0, 0)); // Release
+
+    // Drawing knobs
+    int a_knob_pos = knob_min - attack_val*(knob_len);
+    fill_rect_noinit(45, a_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60)); // A shadow
+    fill_rect_noinit(45, a_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90)); // A knob
+    int d_knob_pos = knob_min - delay_val*(knob_len);
+    fill_rect_noinit(65, d_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60)); // D shadow
+    fill_rect_noinit(65, d_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90)); // D knob
+    int s_knob_pos = knob_min - sustain_val*(knob_len);
+    fill_rect_noinit(245, s_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60)); // S shadow
+    fill_rect_noinit(245, s_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90)); // S knob
+    int r_knob_pos = knob_min - release_val*(knob_len);
+    fill_rect_noinit(265, r_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60)); // R shadow
+    fill_rect_noinit(265, r_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90)); // R knob
 }
 
 void draw_main_screen() {
     clear_screen();
     draw_wave_selection(30, 20, 260, 40);
     draw_waveform(30, 80, 170, 80);
-    draw_keybd(40, 170, 240, 45);
-    draw_adsr(220, 80, 70, 80);
+    draw_keybd();
+    draw_adsr();
 }
 
 short int rgb_to_16bit(int r, int g, int b) {
