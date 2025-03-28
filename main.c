@@ -445,12 +445,64 @@ void key_isr() {
         }
     } else if (((sw_state >> 2) & 0x1) == 0x1) {
         printf("attack\n");
+        if (key_pressed == 1) { // toggle rate
+            fast_knob_change = !fast_knob_change;
+        } else if (key_pressed == 2) { // reset value
+            attack_val = 100;
+        } else if (key_pressed == 4) { // decrease value
+            if (attack_val - (fast_knob_change ? 0.1 : 0.02) >= 0) {
+                attack_val -= (fast_knob_change ? 0.1 : 0.02);
+            }
+        } else if (key_pressed == 8) { // increase value
+            if (attack_val + (fast_knob_change ? 0.1 : 0.02) <= 1) {
+                attack_val += (fast_knob_change ? 0.1 : 0.02);
+            }
+        }
     } else if (((sw_state >> 3) & 0x1) == 0x1) {
         printf("delay\n");
+        if (key_pressed == 1) { // toggle rate
+            fast_knob_change = !fast_knob_change;
+        } else if (key_pressed == 2) { // reset value
+            delay_val = 50;
+        } else if (key_pressed == 4) { // decrease value
+            if (delay_val - (fast_knob_change ? 0.1 : 0.02) >= 0) {
+                delay_val -= (fast_knob_change ? 0.1 : 0.02);
+            }
+        } else if (key_pressed == 8) { // increase value
+            if (delay_val + (fast_knob_change ? 0.1 : 0.02) <= 1) {
+                delay_val += (fast_knob_change ? 0.1 : 0.02);
+            }
+        }
     } else if (((sw_state >> 4) & 0x1) == 0x1) {
         printf("sustain\n");
+        if (key_pressed == 1) { // toggle rate
+            fast_knob_change = !fast_knob_change;
+        } else if (key_pressed == 2) { // reset value
+            sustain_val = 50;
+        } else if (key_pressed == 4) { // decrease value
+            if (sustain_val - (fast_knob_change ? 0.1 : 0.02) >= 0) {
+                sustain_val -= (fast_knob_change ? 0.1 : 0.02);
+            }
+        } else if (key_pressed == 8) { // increase value
+            if (sustain_val + (fast_knob_change ? 0.1 : 0.02) <= 1) {
+                sustain_val += (fast_knob_change ? 0.1 : 0.02);
+            }
+        }
     } else if (((sw_state >> 5) & 0x1) == 0x1) {
         printf("release\n");
+        if (key_pressed == 1) { // toggle rate
+            fast_knob_change = !fast_knob_change;
+        } else if (key_pressed == 2) { // reset value
+            release_val = 50;
+        } else if (key_pressed == 4) { // decrease value
+            if (release_val - (fast_knob_change ? 0.1 : 0.02) >= 0) {
+                release_val -= (fast_knob_change ? 0.1 : 0.02);
+            }
+        } else if (key_pressed == 8) { // increase value
+            if (release_val + (fast_knob_change ? 0.1 : 0.02) <= 1) {
+                release_val += (fast_knob_change ? 0.1 : 0.02);
+            }
+        }
     } else {
         // If no specific mode is selected, then the selected waveform overwrites previous
         int probe_key_pressed = 1;
