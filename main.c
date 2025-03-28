@@ -120,25 +120,22 @@ float wave_data_x[170]; // the x-axis for the wave data
 float wave_data_y[170]; // the y-axis for the wave data
 // int wave_data_plot_x[170]; // we don't need x because it's just a range from 0 to 169
 int wave_data_plot_y[170]; // the y-axis for the wave data to be plotted on the screen
-void init_wave_data_x() {
-    for (int i = 0; i < 170; i++) {
-        wave_data_x[i] = i * 2 * 3.1415926 / 170;
-    }
-}
+void init_wave_data_x();
+void update_wave_data_y();
 
 // 0: sine, 1: square, 2: triangle, 3: sawtooth
-int current_waves[4] = {1, 0, 0, 0}; // the current wave selected for each note
+int current_waves[4] = {0, 1, 0, 0}; // the current wave selected for each note
 
 // sound related functions
-typedef struct wave {
+typedef struct wave_struct {
     float time;
     float output;
     float omega;
     float period;
     bool is_playing;
-} wave;
+} wave_struct;
 
-wave waves[20] = {
+wave_struct waves[20] = {
     {0, 0, 2 * M_PI * 261.63, 1 / 261.63, false}, // C4
     {0, 0, 2 * M_PI * 277.18, 1 / 277.18, false}, // C#4
     {0, 0, 2 * M_PI * 293.66, 1 / 293.66, false}, // D4
@@ -164,9 +161,9 @@ wave waves[20] = {
 bool g_update_canvas = true; // flag to update the canvas
 
 void update_all_waves();
-void update_wave(wave *w);
+void update_wave(wave_struct *w);
 uint32_t get_all_waves_output();
-float get_wave_output(wave *w);
+float get_wave_output(wave_struct *w);
 
 #pragma endregion
 
@@ -309,10 +306,25 @@ int main () {
         if (!status) {
             // input some random data
             update_all_waves();
+            
+            // // temporary: print all the notes
+            // for (int i=0; i<20; i++) {
+            //     note_struct *note_ptr = notes + i;
+            //     printf("Note %d: Name=%s, Pressed=%d, PS2 Key=%c, Frequency=%.2f Hz\n", 
+            //            i, note_ptr->name, note_ptr->pressed, note_ptr->ps2_key, note_ptr->frequency);
+            // }
+
+            // // temporary: print all the waves
+            // for (int i=0; i<20; i++) {
+            //     wave_struct *wave_ptr = waves + i;
+            //     printf("Wave %d: Time=%.2f, Output=%.2f, Omega=%.2f, Period=%.2f, IsPlaying=%d\n", 
+            //            i, wave_ptr->time, wave_ptr->output, wave_ptr->omega, wave_ptr->period, wave_ptr->is_playing);
+            // }
+
             uint32_t output = get_all_waves_output();
             audio_ptr->LDATA = (int) output;
             audio_ptr->RDATA = (int) output;
-            printf("output: 0x%X\n", output);
+            // printf("output: 0x%X\n", output);
         }
         
         if (g_update_canvas) {
@@ -488,8 +500,9 @@ void update_all_waves() {
     }
 }
 
-void update_wave(wave *w) {
+void update_wave(wave_struct *w) {
     if (!w->is_playing) {
+        w->output = 0;
         return;
     }
 
@@ -501,19 +514,17 @@ void update_wave(wave *w) {
     float phase = w->time * w->omega;
     
     w->output = 0;
-    for (int i=0; i<4; i++) {
-        if (current_waves[0]) {
-            w->output += sine_wave(phase);
-        }
-        if (current_waves[1]) {
-            w->output += square_wave(phase);
-        }
-        if (current_waves[2]) {
-            w->output += triangle_wave(phase);
-        }
-        if (current_waves[3]) {
-            w->output += sawtooth_wave(phase);
-        }
+    if (current_waves[0] != 0) {
+        w->output += sine_wave(phase) * current_waves[0];
+    }
+    if (current_waves[1] != 0) {
+        w->output += square_wave(phase) * current_waves[1];
+    }
+    if (current_waves[2] != 0) {
+        w->output += triangle_wave(phase) * current_waves[2];
+    }
+    if (current_waves[3] != 0) {
+        w->output += sawtooth_wave(phase) * current_waves[3];
     }
 }
 
@@ -523,12 +534,12 @@ uint32_t get_all_waves_output() {
         temp_output += get_wave_output(&waves[i]);
     }
 
-    uint32_t output = (uint32_t) (temp_output * 0x7FFFFFF + 0x7FFFFFF);
+    uint32_t output = (uint32_t) (temp_output * 0x7FFFFFFF + 0x7FFFFFFF);
 
     return output;
 }
 
-float get_wave_output(wave *w) {
+float get_wave_output(wave_struct *w) {
     return w->output;
 }
 
@@ -665,9 +676,50 @@ void draw_wave_selection(int x, int y, int width, int height) {
     plot_image_triangle(x + 195, y + 10);
 }
 
+void init_wave_data_x() {
+    for (int i = 0; i < 170; i++) {
+        wave_data_x[i] = i * 2 * 3.1415926 / 170;
+    }
+}
+
+void update_wave_data_y() {
+
+    static bool sign[170];
+
+    for (int i = 0; i < 170; i++) {
+        float phase = wave_data_x[i];
+        wave_data_y[i] = 0;
+        if (current_waves[0] != 0) {
+            wave_data_y[i] += sine_wave(phase) * current_waves[0];
+        }
+        if (current_waves[1] != 0) {
+            wave_data_y[i] += square_wave(phase) * current_waves[1];
+        }
+        if (current_waves[2] != 0) {
+            wave_data_y[i] += triangle_wave(phase) * current_waves[2];
+        }
+        if (current_waves[3] != 0) {
+            wave_data_y[i] += sawtooth_wave(phase) * current_waves[3];
+        }
+
+        // multiply by 100 to scale the wave
+        // wave_data_y[i] = wave_data_y[i] * 20 + 40;
+        // actually, let's do the logarithm to scale the wave
+        sign[i] = (wave_data_y[i] > 0) ? true : false;
+        wave_data_y[i] = log10(fabs(wave_data_y[i]) + 1) * 20;
+        wave_data_y[i] = (sign[i]) ? wave_data_y[i] : -wave_data_y[i];
+        wave_data_y[i] = wave_data_y[i] + 40; // offset to the middle of the screen
+        wave_data_plot_y[i] = (int) wave_data_y[i];
+    }
+}
+
 void draw_waveform(int x, int y, int width, int height) {
     draw_rect(x, y, width, height, 0xFFFF);
-    // calculate the 
+    init_wave_data_x();
+    update_wave_data_y();
+    for (int i = 1; i < 170; i++) {
+        draw_line(x + i - 1, y + wave_data_plot_y[i - 1], x + i, y + wave_data_plot_y[i], 0xFFFF);
+    }
 }
 
 void draw_keybd(int x, int y, int width, int height) {
@@ -688,6 +740,7 @@ void draw_adsr(int x, int y, int width, int height) {
 }
 
 void draw_main_screen() {
+    clear_screen();
     draw_wave_selection(30, 20, 260, 40);
     draw_waveform(30, 80, 170, 80);
     draw_keybd(40, 170, 240, 45);
