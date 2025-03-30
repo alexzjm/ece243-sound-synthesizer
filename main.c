@@ -88,7 +88,7 @@ note_struct notes[20] = {
 };
 
 double attack_val = 1;
-double delay_val = 0.5;
+double decay_val = 0.5;
 double sustain_val = 1;
 double release_val = 0;
 bool fast_knob_change = true;
@@ -141,29 +141,31 @@ typedef struct wave_struct {
     float omega;
     float period;
     bool is_playing;
+    char adsr_stat; // a, d, s, r, n
+    float adsr_multi;
 } wave_struct;
 
 wave_struct waves[20] = {
-    {0, 0, 2 * M_PI * 261.63, 1 / 261.63, false}, // C4
-    {0, 0, 2 * M_PI * 277.18, 1 / 277.18, false}, // C#4
-    {0, 0, 2 * M_PI * 293.66, 1 / 293.66, false}, // D4
-    {0, 0, 2 * M_PI * 311.13, 1 / 311.13, false}, // D#4
-    {0, 0, 2 * M_PI * 329.63, 1 / 329.63, false}, // E4
-    {0, 0, 2 * M_PI * 349.23, 1 / 349.23, false}, // F4
-    {0, 0, 2 * M_PI * 369.99, 1 / 369.99, false}, // F#4
-    {0, 0, 2 * M_PI * 392.00, 1 / 392.00, false}, // G4
-    {0, 0, 2 * M_PI * 415.30, 1 / 415.30, false}, // G#4
-    {0, 0, 2 * M_PI * 440.00, 1 / 440.00, false}, // A4
-    {0, 0, 2 * M_PI * 466.16, 1 / 466.16, false}, // A#4
-    {0, 0, 2 * M_PI * 493.88, 1 / 493.88, false}, // B4
-    {0, 0, 2 * M_PI * 523.25, 1 / 523.25, false}, // C5
-    {0, 0, 2 * M_PI * 554.37, 1 / 554.37, false}, // C#5
-    {0, 0, 2 * M_PI * 587.33, 1 / 587.33, false}, // D5
-    {0, 0, 2 * M_PI * 622.25, 1 / 622.25, false}, // D#5
-    {0, 0, 2 * M_PI * 659.25, 1 / 659.25, false}, // E5
-    {0, 0, 2 * M_PI * 698.46, 1 / 698.46, false}, // F5
-    {0, 0, 2 * M_PI * 739.99, 1 / 739.99, false}, // F#5
-    {0, 0, 2 * M_PI * 783.99, 1 / 783.99, false}  // G5
+    {0, 0, 2 * M_PI * 261.63, 1 / 261.63, false, 'n', 0}, // C4
+    {0, 0, 2 * M_PI * 277.18, 1 / 277.18, false, 'n', 0}, // C#4
+    {0, 0, 2 * M_PI * 293.66, 1 / 293.66, false, 'n', 0}, // D4
+    {0, 0, 2 * M_PI * 311.13, 1 / 311.13, false, 'n', 0}, // D#4
+    {0, 0, 2 * M_PI * 329.63, 1 / 329.63, false, 'n', 0}, // E4
+    {0, 0, 2 * M_PI * 349.23, 1 / 349.23, false, 'n', 0}, // F4
+    {0, 0, 2 * M_PI * 369.99, 1 / 369.99, false, 'n', 0}, // F#4
+    {0, 0, 2 * M_PI * 392.00, 1 / 392.00, false, 'n', 0}, // G4
+    {0, 0, 2 * M_PI * 415.30, 1 / 415.30, false, 'n', 0}, // G#4
+    {0, 0, 2 * M_PI * 440.00, 1 / 440.00, false, 'n', 0}, // A4
+    {0, 0, 2 * M_PI * 466.16, 1 / 466.16, false, 'n', 0}, // A#4
+    {0, 0, 2 * M_PI * 493.88, 1 / 493.88, false, 'n', 0}, // B4
+    {0, 0, 2 * M_PI * 523.25, 1 / 523.25, false, 'n', 0}, // C5
+    {0, 0, 2 * M_PI * 554.37, 1 / 554.37, false, 'n', 0}, // C#5
+    {0, 0, 2 * M_PI * 587.33, 1 / 587.33, false, 'n', 0}, // D5
+    {0, 0, 2 * M_PI * 622.25, 1 / 622.25, false, 'n', 0}, // D#5
+    {0, 0, 2 * M_PI * 659.25, 1 / 659.25, false, 'n', 0}, // E5
+    {0, 0, 2 * M_PI * 698.46, 1 / 698.46, false, 'n', 0}, // F5
+    {0, 0, 2 * M_PI * 739.99, 1 / 739.99, false, 'n', 0}, // F#5
+    {0, 0, 2 * M_PI * 783.99, 1 / 783.99, false, 'n', 0}  // G5
 };
 
 bool g_update_canvas = true; // flag to update the canvas
@@ -463,14 +465,14 @@ void key_isr() {
         if (key_pressed == 1) { // toggle rate
             fast_knob_change = !fast_knob_change;
         } else if (key_pressed == 2) { // reset value
-            delay_val = 50;
+            decay_val = 50;
         } else if (key_pressed == 4) { // decrease value
-            if (delay_val - (fast_knob_change ? 0.1 : 0.02) >= 0) {
-                delay_val -= (fast_knob_change ? 0.1 : 0.02);
+            if (decay_val - (fast_knob_change ? 0.1 : 0.02) >= 0) {
+                decay_val -= (fast_knob_change ? 0.1 : 0.02);
             }
         } else if (key_pressed == 8) { // increase value
-            if (delay_val + (fast_knob_change ? 0.1 : 0.02) <= 1) {
-                delay_val += (fast_knob_change ? 0.1 : 0.02);
+            if (decay_val + (fast_knob_change ? 0.1 : 0.02) <= 1) {
+                decay_val += (fast_knob_change ? 0.1 : 0.02);
             }
         }
     } else if (((sw_state >> 4) & 0x1) == 0x1) {
@@ -543,7 +545,13 @@ void ps2_isr() {
         for (int idx = 0; idx < 20; idx++) {
             if (code == notes[idx].code) {
                 notes[idx].pressed = break_code ? false : true;
-                waves[idx].is_playing = notes[idx].pressed;
+                if (waves[idx].is_playing != notes[idx].pressed) {
+                    waves[idx].is_playing = notes[idx].pressed;
+                    if (waves[idx].is_playing) {
+                        waves[idx].adsr_stat = 'a';
+                    }
+                }
+                
 
                 printf("note represent by %c is now %d\n", notes[idx].ps2_key, notes[idx].pressed);
                 // !!! maybe play notes here
@@ -562,8 +570,21 @@ void update_all_waves() {
 
 void update_wave(wave_struct *w) {
     if (!w->is_playing) {
-        w->output = 0;
-        return;
+        if (w->adsr_stat == 'n') {
+            w->output = 0;
+            return;
+        } else {
+            // calculate envelope multiplier and return
+            w->adsr_stat = 'r';
+            w->adsr_multi -= sustain_val * (1 - release_val) * (1 - release_val);
+
+            // change state to n if release is done
+            if (w->adsr_multi <= 0) {
+                w->adsr_multi = 0;
+                w->adsr_stat = 'n';
+            }
+        }
+        
     }
 
     static float dt = 1.0 / 8000.0;
@@ -586,6 +607,28 @@ void update_wave(wave_struct *w) {
     if (current_waves[3] != 0) {
         w->output += sawtooth_wave(phase) * current_waves[3];
     }
+
+    // Calculating adsr envelope multiplier
+    if (w->adsr_stat == 'a') {
+        w->adsr_multi += attack_val * attack_val;
+        if (w->adsr_multi > 1) {
+            w->adsr_multi = 1;
+            w->adsr_stat = 'd';
+        }
+    } else if (w->adsr_stat == 'd') {
+        if (decay_val == 0) {
+            w->adsr_multi = sustain_val;
+            w->adsr_stat = 's';
+        } else {
+            w->adsr_multi -= sustain_val * (1 - decay_val) * (1 - decay_val);
+            if (w->adsr_multi < sustain_val) {
+                w->adsr_multi = sustain_val;
+                w->adsr_stat = 's';
+            }
+        }
+    } 
+
+    w->output *= w->adsr_multi;
 }
 
 uint32_t get_all_waves_output() {
@@ -594,7 +637,7 @@ uint32_t get_all_waves_output() {
         temp_output += get_wave_output(&waves[i]);
     }
 
-    uint32_t output = (uint32_t) (temp_output * 0x7FFFFFFF + 0x7FFFFFFF);
+    uint32_t output = (uint32_t) (temp_output * 0x7FFFFFF + 0x7FFFFFFF);
 
     return output;
 }
@@ -754,6 +797,7 @@ void update_wave_data_y() {
     for (int i = 0; i < 140; i++) {
         float phase = wave_data_x[i];
         wave_data_y[i] = 0;
+
         if (current_waves[0] != 0) {
             wave_data_y[i] += sine_wave(phase) * current_waves[0];
         }
@@ -767,14 +811,23 @@ void update_wave_data_y() {
             wave_data_y[i] += sawtooth_wave(phase) * current_waves[3];
         }
 
+        int num_waves = 0;
+        for (int i = 0; i < 4; i++) {
+            num_waves += fabs(current_waves[i]);
+        }
+
+        wave_data_y[i] *= (25 / num_waves);
+        wave_data_y[i] += 35;
+        wave_data_plot_y[i] = (int) wave_data_y[i];
+
         // multiply by 100 to scale the wave
         // wave_data_y[i] = wave_data_y[i] * 20 + 40;
         // actually, let's do the logarithm to scale the wave
-        sign[i] = (wave_data_y[i] > 0) ? true : false;
+        /*sign[i] = (wave_data_y[i] > 0) ? true : false;
         wave_data_y[i] = log10(fabs(wave_data_y[i]) + 1) * 20;
         wave_data_y[i] = (sign[i]) ? wave_data_y[i] : -wave_data_y[i];
         wave_data_y[i] = wave_data_y[i] + 40; // offset to the middle of the screen
-        wave_data_plot_y[i] = (int) wave_data_y[i];
+        wave_data_plot_y[i] = (int) wave_data_y[i];*/
     }
 }
 
@@ -783,7 +836,7 @@ void draw_waveform(int x, int y, int width, int height) {
     init_wave_data_x();
     update_wave_data_y();
     for (int i = 1; i < 140; i++) {
-        draw_line(x + i - 1, y + wave_data_plot_y[i - 1], x + i, y + wave_data_plot_y[i], 0xFFFF);
+        draw_line(x + i - 1, y + wave_data_plot_y[i - 1], x + i, y + wave_data_plot_y[i], rgb_to_16bit(255, 182, 80));
     }
 }
 
@@ -815,7 +868,7 @@ void draw_adsr() {
     int a_knob_pos = knob_min - attack_val*(knob_len);
     fill_rect_noinit(45, a_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60)); // A shadow
     fill_rect_noinit(45, a_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90)); // A knob
-    int d_knob_pos = knob_min - delay_val*(knob_len);
+    int d_knob_pos = knob_min - decay_val*(knob_len);
     fill_rect_noinit(65, d_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60)); // D shadow
     fill_rect_noinit(65, d_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90)); // D knob
     int s_knob_pos = knob_min - sustain_val*(knob_len);
