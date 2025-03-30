@@ -124,10 +124,10 @@ void draw_keybd();
 void draw_adsr();
 void draw_wave_selection(int x, int y, int width, int height);
 
-float wave_data_x[170]; // the x-axis for the wave data
-float wave_data_y[170]; // the y-axis for the wave data
-// int wave_data_plot_x[170]; // we don't need x because it's just a range from 0 to 169
-int wave_data_plot_y[170]; // the y-axis for the wave data to be plotted on the screen
+float wave_data_x[140]; // the x-axis for the wave data
+float wave_data_y[140]; // the y-axis for the wave data
+// int wave_data_plot_x[140]; // we don't need x because it's just a range from 0 to 169
+int wave_data_plot_y[140]; // the y-axis for the wave data to be plotted on the screen
 void init_wave_data_x();
 void update_wave_data_y();
 
@@ -742,16 +742,16 @@ void draw_wave_selection(int x, int y, int width, int height) {
 }
 
 void init_wave_data_x() {
-    for (int i = 0; i < 170; i++) {
-        wave_data_x[i] = i * 2 * 3.1415926 / 170;
+    for (int i = 0; i < 140; i++) {
+        wave_data_x[i] = i * 2 * 3.1415926 / 140;
     }
 }
 
 void update_wave_data_y() {
 
-    static bool sign[170];
+    static bool sign[140];
 
-    for (int i = 0; i < 170; i++) {
+    for (int i = 0; i < 140; i++) {
         float phase = wave_data_x[i];
         wave_data_y[i] = 0;
         if (current_waves[0] != 0) {
@@ -782,7 +782,7 @@ void draw_waveform(int x, int y, int width, int height) {
     draw_rect(x, y, width, height, 0xFFFF);
     init_wave_data_x();
     update_wave_data_y();
-    for (int i = 1; i < 170; i++) {
+    for (int i = 1; i < 140; i++) {
         draw_line(x + i - 1, y + wave_data_plot_y[i - 1], x + i, y + wave_data_plot_y[i], 0xFFFF);
     }
 }
@@ -829,7 +829,7 @@ void draw_adsr() {
 void draw_main_screen() {
     clear_screen();
     draw_wave_selection(30, 20, 260, 40);
-    draw_waveform(30, 80, 170, 80);
+    draw_waveform(90, 80, 140, 70);
     draw_keybd();
     draw_adsr();
 }
