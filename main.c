@@ -107,12 +107,12 @@ float sawtooth_wave(float phase);
 // VGA related functions & settings
 volatile int pixel_buffer_start; // global variable
 short int Buffer1[240][512]; // 240 rows, 512 (320 + padding) columns (first buffer)
-void clear_screen();
+void init_main_screen();
+void fill_background();
 void draw_line(int x0, int y0, int x1, int y1, short int line_color);
 void plot_pixel(int x, int y, short int line_color);
 void swap(int* x, int* y);
 void wait_for_vsync();
-void draw_box(int x, int y, short int box_color);
 void update_x_y(int* x, int* y, int* last_x, int* last_y, int* last_last_x, int* last_last_y, int* dx, int* dy);
 void draw_rect(int x, int y, int width, int height, short int color);
 void fill_rect(rectangle rect, short int color);
@@ -121,6 +121,7 @@ short int rgb_to_16bit(int r, int g, int b);
 void draw_main_screen();
 void draw_waveform(int x, int y, int width, int height);
 void draw_keybd();
+void update_keybd(int note_idx);
 void draw_adsr();
 void draw_wave_selection(int x, int y, int width, int height);
 
@@ -296,12 +297,12 @@ int main () {
     wait_for_vsync();
     /* initialize a pointer to the pixel buffer, used by drawing functions */
     pixel_buffer_start = *pixel_ctrl_ptr;
-    clear_screen(); // pixel_buffer_start points to the pixel buffer
+    init_main_screen(); // pixel_buffer_start points to the pixel buffer
 
     /* set back pixel buffer to Buffer 2 */
     *(pixel_ctrl_ptr + 1) = (int) &Buffer1;
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
-    clear_screen(); // pixel_buffer_start points to the pixel buffer
+    init_main_screen(); // pixel_buffer_start points to the pixel buffer
 
     // Audio related codes
     audio_ptr->CTRL = 0x8; // clear the output FIFOs
@@ -337,10 +338,10 @@ int main () {
             // printf("output: 0x%X\n", output);
         }
         
-        if (g_update_canvas) {
+        /*if (g_update_canvas) {
             draw_main_screen();
             g_update_canvas = false;
-        }
+        }*/
         // draw_main_screen();
 
     }
@@ -434,6 +435,7 @@ void key_isr() {
         } else if (key_pressed == 8) {
             current_waves[SIN_IDX] += 1;
         }
+        draw_waveform(90, 80, 140, 70);
     } else if (((sw_state >> 1) & 0x1) == 0x1) {
         printf("subtraction mode code goes here\n");
         if (key_pressed == 1) {
@@ -445,12 +447,13 @@ void key_isr() {
         } else if (key_pressed == 8) {
             current_waves[SIN_IDX] -= 1;
         }
+        draw_waveform(90, 80, 140, 70);
     } else if (((sw_state >> 2) & 0x1) == 0x1) {
         printf("attack\n");
         if (key_pressed == 1) { // toggle rate
             fast_knob_change = !fast_knob_change;
         } else if (key_pressed == 2) { // reset value
-            attack_val = 100;
+            attack_val = 1;
         } else if (key_pressed == 4) { // decrease value
             if (attack_val - (fast_knob_change ? 0.1 : 0.02) >= 0) {
                 attack_val -= (fast_knob_change ? 0.1 : 0.02);
@@ -460,12 +463,13 @@ void key_isr() {
                 attack_val += (fast_knob_change ? 0.1 : 0.02);
             }
         }
+        update_adsr('a');
     } else if (((sw_state >> 3) & 0x1) == 0x1) {
         printf("delay\n");
         if (key_pressed == 1) { // toggle rate
             fast_knob_change = !fast_knob_change;
         } else if (key_pressed == 2) { // reset value
-            decay_val = 50;
+            decay_val = 0.5;
         } else if (key_pressed == 4) { // decrease value
             if (decay_val - (fast_knob_change ? 0.1 : 0.02) >= 0) {
                 decay_val -= (fast_knob_change ? 0.1 : 0.02);
@@ -475,12 +479,13 @@ void key_isr() {
                 decay_val += (fast_knob_change ? 0.1 : 0.02);
             }
         }
+        update_adsr('d');
     } else if (((sw_state >> 4) & 0x1) == 0x1) {
         printf("sustain\n");
         if (key_pressed == 1) { // toggle rate
             fast_knob_change = !fast_knob_change;
         } else if (key_pressed == 2) { // reset value
-            sustain_val = 50;
+            sustain_val = 1;
         } else if (key_pressed == 4) { // decrease value
             if (sustain_val - (fast_knob_change ? 0.1 : 0.02) >= 0) {
                 sustain_val -= (fast_knob_change ? 0.1 : 0.02);
@@ -490,12 +495,13 @@ void key_isr() {
                 sustain_val += (fast_knob_change ? 0.1 : 0.02);
             }
         }
+        update_adsr('s');
     } else if (((sw_state >> 5) & 0x1) == 0x1) {
         printf("release\n");
         if (key_pressed == 1) { // toggle rate
             fast_knob_change = !fast_knob_change;
         } else if (key_pressed == 2) { // reset value
-            release_val = 50;
+            release_val = 0;
         } else if (key_pressed == 4) { // decrease value
             if (release_val - (fast_knob_change ? 0.1 : 0.02) >= 0) {
                 release_val -= (fast_knob_change ? 0.1 : 0.02);
@@ -505,6 +511,7 @@ void key_isr() {
                 release_val += (fast_knob_change ? 0.1 : 0.02);
             }
         }
+        update_adsr('r');
     } else {
         // If no specific mode is selected, then the selected waveform overwrites previous
         int probe_key_pressed = 1;
@@ -513,7 +520,7 @@ void key_isr() {
             current_waves[4-1-idx] = (probe_key_pressed == key_pressed) ? 1 : 0;
             probe_key_pressed *= 2;
         }
-
+        draw_waveform(90, 80, 140, 70);
     }
 
     for (int i = 0; i < 4; i++) {
@@ -550,11 +557,9 @@ void ps2_isr() {
                     if (waves[idx].is_playing) {
                         waves[idx].adsr_stat = 'a';
                     }
+                    update_keybd(idx);
                 }
-                
-
                 printf("note represent by %c is now %d\n", notes[idx].ps2_key, notes[idx].pressed);
-                // !!! maybe play notes here
             }
         }
 
@@ -667,14 +672,6 @@ void update_x_y(int* x, int* y, int* last_x, int* last_y, int* last_last_x, int*
     *x += *dx;
 }
 
-void draw_box(int x, int y, short int box_color) {
-    // 2x2
-    plot_pixel(x, y, box_color);
-    plot_pixel(x + 1, y, box_color);
-    plot_pixel(x, y + 1, box_color);
-    plot_pixel(x + 1, y + 1, box_color);
-}
-
 void plot_pixel(int x, int y, short int line_color)
 {
     volatile short int *one_pixel_address;
@@ -684,7 +681,7 @@ void plot_pixel(int x, int y, short int line_color)
         *one_pixel_address = line_color;
 }
 
-void clear_screen() {
+void fill_background() {
     for (int x = 0; x < 320; x++) {
         for (int y = 0; y < 240; y++) {
             plot_pixel(x, y, rgb_to_16bit(40, 40, 40));
@@ -819,20 +816,11 @@ void update_wave_data_y() {
         wave_data_y[i] *= (25 / num_waves);
         wave_data_y[i] += 35;
         wave_data_plot_y[i] = (int) wave_data_y[i];
-
-        // multiply by 100 to scale the wave
-        // wave_data_y[i] = wave_data_y[i] * 20 + 40;
-        // actually, let's do the logarithm to scale the wave
-        /*sign[i] = (wave_data_y[i] > 0) ? true : false;
-        wave_data_y[i] = log10(fabs(wave_data_y[i]) + 1) * 20;
-        wave_data_y[i] = (sign[i]) ? wave_data_y[i] : -wave_data_y[i];
-        wave_data_y[i] = wave_data_y[i] + 40; // offset to the middle of the screen
-        wave_data_plot_y[i] = (int) wave_data_y[i];*/
     }
 }
 
 void draw_waveform(int x, int y, int width, int height) {
-    draw_rect(x, y, width, height, 0xFFFF);
+    fill_rect_noinit(x, y, width, height, rgb_to_16bit(0, 0, 0));
     init_wave_data_x();
     update_wave_data_y();
     for (int i = 1; i < 140; i++) {
@@ -849,6 +837,16 @@ void draw_keybd() {
             } else {
                 fill_rect(notes[note_idx].rectangles[rect_idx], (notes[note_idx].num_rects == 1) ? rgb_to_16bit(0, 0, 0) : rgb_to_16bit(255, 255, 255));
             }
+        }
+    }
+}
+
+void update_keybd(int note_idx) {
+    for (int rect_idx = 0; rect_idx < notes[note_idx].num_rects; rect_idx++) {
+        if (notes[note_idx].pressed) {
+            fill_rect(notes[note_idx].rectangles[rect_idx], rgb_to_16bit(255, 182, 80));
+        } else {
+            fill_rect(notes[note_idx].rectangles[rect_idx], (notes[note_idx].num_rects == 1) ? rgb_to_16bit(0, 0, 0) : rgb_to_16bit(255, 255, 255));
         }
     }
 }
@@ -879,8 +877,64 @@ void draw_adsr() {
     fill_rect_noinit(265, r_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90)); // R knob
 }
 
+void update_adsr(char changed) {
+    const int shadow_disp = 5;
+    const int knob_min = 145;
+    const int knob_len = 70;
+
+    if (changed == 'a') {
+        // erase
+        fill_rect_noinit(46, 75, 8, 75, rgb_to_16bit(0, 0, 0)); // Attack
+        fill_rect_noinit(45, 75, 1, 75, rgb_to_16bit(40, 40, 40)); // Left Border
+        fill_rect_noinit(55, 75, 1, 75, rgb_to_16bit(40, 40, 40)); // Right Border
+
+        // drawing knob
+        int a_knob_pos = knob_min - attack_val*(knob_len);
+        fill_rect_noinit(45, a_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60)); // A shadow
+        fill_rect_noinit(45, a_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90)); // A knob
+    } else if (changed == 'd') {
+        // erase
+        fill_rect_noinit(66, 75, 8, 75, rgb_to_16bit(0, 0, 0)); // Delay
+        fill_rect_noinit(65, 75, 1, 75, rgb_to_16bit(40, 40, 40)); // Left Border
+        fill_rect_noinit(75, 75, 1, 75, rgb_to_16bit(40, 40, 40)); // Right Border
+
+        // drawing knob
+        int d_knob_pos = knob_min - decay_val*(knob_len);
+        fill_rect_noinit(65, d_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60)); // D shadow
+        fill_rect_noinit(65, d_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90)); // D knob
+    } else if (changed == 's') {
+        // erase
+        fill_rect_noinit(246, 75, 8, 75, rgb_to_16bit(0, 0, 0)); // Sustain
+        fill_rect_noinit(245, 75, 1, 75, rgb_to_16bit(40, 40, 40)); // Left Border
+        fill_rect_noinit(255, 75, 1, 75, rgb_to_16bit(40, 40, 40)); // Right Border
+
+        // drawing knob
+        int s_knob_pos = knob_min - sustain_val*(knob_len);
+        fill_rect_noinit(245, s_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60)); // S shadow
+        fill_rect_noinit(245, s_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90)); // S knob
+    } else if (changed == 'r') {
+        // erase
+        fill_rect_noinit(266, 75, 8, 75, rgb_to_16bit(0, 0, 0)); // Release
+        fill_rect_noinit(265, 75, 1, 75, rgb_to_16bit(40, 40, 40)); // Left Border
+        fill_rect_noinit(275, 75, 1, 75, rgb_to_16bit(40, 40, 40)); // Right Border
+
+        // drawing knob
+        int r_knob_pos = knob_min - release_val*(knob_len);
+        fill_rect_noinit(265, r_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60)); // R shadow
+        fill_rect_noinit(265, r_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90)); // R knob
+    }
+}
+
 void draw_main_screen() {
-    clear_screen();
+    fill_background();
+    draw_wave_selection(30, 20, 260, 40);
+    draw_waveform(90, 80, 140, 70);
+    draw_keybd();
+    draw_adsr();
+}
+
+void init_main_screen() {
+    fill_background();
     draw_wave_selection(30, 20, 260, 40);
     draw_waveform(90, 80, 140, 70);
     draw_keybd();
