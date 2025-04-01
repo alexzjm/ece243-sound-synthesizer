@@ -652,7 +652,7 @@ uint32_t get_all_waves_output() {
         temp_output += get_wave_output(&waves[i]);
     }
 
-    uint32_t output = (uint32_t) (temp_output * 0x7FFFFFF + 0x7FFFFFFF);
+    uint32_t output = (uint32_t) (temp_output * 0x7FFFFFF);
 
     return output;
 }
