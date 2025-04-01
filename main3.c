@@ -254,7 +254,7 @@ void update_all_waves() {
     }
 }
 
-uint32_t get_all_waves_output() {
+/*uint32_t get_all_waves_output() {
     int32_t temp_output = 0;
     for (int i = 0; i < 20; i++) {
         temp_output += waves[i].output;
@@ -263,6 +263,28 @@ uint32_t get_all_waves_output() {
     uint32_t output = (uint32_t)(((int64_t)temp_output * 0x7FFFFFFF) / Q15_MAX);
     // printf("output: %d\n", output);
     return output;
+}*/
+
+uint32_t get_all_waves_output() {
+    int32_t temp_output = 0;
+    
+    // Sum the wave outputs
+    for (int i = 0; i < 20; i++) {
+        temp_output += waves[i].output;
+        
+        // Clamp to prevent overflow
+        if (temp_output > Q15_MAX * 20) temp_output = Q15_MAX * 20;
+        if (temp_output < -Q15_MAX * 20) temp_output = -Q15_MAX * 20;
+    }
+
+    // Scale to the range 0x7FFFFFFF to 0x80000000
+    int64_t scaled = ((int64_t)temp_output * 0x7FFFFFFF) / (Q15_MAX * 20);
+
+    // Clamp again to ensure it fits in the expected range
+    if (scaled > 0x7FFFFFFF) scaled = 0x7FFFFFFF;
+    if (scaled < -0x80000000LL) scaled = -0x80000000LL;
+
+    return (uint32_t)scaled;
 }
 
 int32_t get_wave_output(wave_struct *w) {
