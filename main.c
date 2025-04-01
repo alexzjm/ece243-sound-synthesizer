@@ -12,6 +12,7 @@
 #define KEY_BASE 0xFF200050
 #define SWITCH_BASE 0xFF200040
 #define TIMER_BASE 0xFF202000
+#define LED_BASE 0xFF200000
 #define PS2_BASE 0xFF200100
 #define SIN_IDX 0
 #define SQR_IDX 1
@@ -49,6 +50,10 @@ typedef struct timer_s {
     volatile unsigned int SNAP_SHOT_LOW;
     volatile unsigned int SNAP_SHOT_HIGH;
 } timer_s;
+
+typedef struct led_s {
+    volatile unsigned int LEDR;
+} led_s;
 
 typedef struct rectangle {
     int x_base;
@@ -264,6 +269,7 @@ void erase_image_triangle(int x, int y) {
 int main () {
 
     audio_s *audio_ptr = (audio_s *)AUDIO_BASE;
+    led_s *led_ptr = (led_s *)LED_BASE;
 
     // Setup I/O devices to handle interrupts
     set_key();
@@ -316,6 +322,7 @@ int main () {
         bool status = audio_ptr->RALC == 0 || audio_ptr->WSLC == 0;
         // while (audio_ptr->RALC == 0 || audio_ptr->WSLC == 0);
         if (!status) {
+            led_ptr->LEDR = 0x1; // turn on the first LED to indicate that the FIFO is not empty
             // input some random data
             update_all_waves();
             
@@ -337,6 +344,8 @@ int main () {
             audio_ptr->LDATA = (int) output;
             audio_ptr->RDATA = (int) output;
             // printf("output: 0x%X\n", output);
+        } else {
+            led_ptr->LEDR = 0x2; // turn on the second LED to indicate that the FIFO is empty
         }
         
         /*if (g_update_canvas) {
