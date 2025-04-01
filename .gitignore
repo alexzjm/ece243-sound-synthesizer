@@ -1,2 +1,5 @@
 .idea/
 gdbopxdriscv.ini
+*.c.o
+*.elf
+*.c.o
