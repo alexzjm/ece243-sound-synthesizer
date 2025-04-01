@@ -130,14 +130,16 @@ typedef struct wave_struct {
 
 // 用固定点实现的波形查表函数
 // 本例采用 16 点正弦表，索引取相位高 4 位
-#define SINE_TABLE_SIZE 16
-#define SINE_INDEX_SHIFT (32 - 4)
-static const int16_t sine_table[SINE_TABLE_SIZE] = {
-    0,      12540,  23170,  30274,
-    32767,  30274,  23170,  12540,
-    0,      -12540, -23170, -30274,
-    -32767, -30274, -23170, -12540
-};
+#define SINE_TABLE_SIZE 256
+#define SINE_INDEX_SHIFT (32 - 8)
+
+static int16_t sine_table[SINE_TABLE_SIZE];
+
+void generate_sine_table() {
+    for (int i = 0; i < SINE_TABLE_SIZE; i++) {
+        sine_table[i] = (int16_t)(32767 * sin(2.0 * M_PI * i / SINE_TABLE_SIZE));
+    }
+}
 
 int16_t fixed_sine(uint32_t phase) {
     uint32_t index = phase >> SINE_INDEX_SHIFT;
@@ -149,6 +151,7 @@ int16_t fixed_square(uint32_t phase) {
 }
 
 int16_t fixed_triangle(uint32_t phase) {
+    phase -= 0x40000000UL;
     if (phase < 0x80000000UL) {
         int32_t value = (int32_t)((((uint64_t)phase * (2ULL * Q15_MAX)) >> 31) - Q15_MAX);
         return value;
@@ -160,6 +163,7 @@ int16_t fixed_triangle(uint32_t phase) {
 }
 
 int16_t fixed_sawtooth(uint32_t phase) {
+    phase -= 0x80000000UL;
     int32_t value = (int32_t)((((uint64_t)phase * (2ULL * Q15_MAX)) >> 32) - Q15_MAX);
     return value;
 }
@@ -425,30 +429,6 @@ void draw_wave_selection(int x, int y, int width, int height) {
 // 本例不再使用 wave_data_x 和 wave_data_y 浮点数组，直接计算每个采样点
 int wave_data_plot_y[140] = {0};
 
-/*void update_wave_data_y() {
-    // 用 32 位相位的值，从 0 到 2π 对应 0 到 0xFFFFFFFF
-    uint32_t phase_inc = 0x100000000UL / 140;
-    for (int i = 0; i < 140; i++) {
-        uint32_t phase = i * phase_inc;
-        int32_t sum = 0;
-        if (current_waves[0] != 0)
-            sum += fixed_sine(phase) * current_waves[0];
-        if (current_waves[1] != 0)
-            sum += fixed_square(phase) * current_waves[1];
-        if (current_waves[2] != 0)
-            sum += fixed_triangle(phase) * current_waves[2];
-        if (current_waves[3] != 0)
-            sum += fixed_sawtooth(phase) * current_waves[3];
-        int num_waves = 0;
-        for (int j = 0; j < 4; j++) {
-            num_waves += abs(current_waves[j]);
-        }
-        if(num_waves == 0) num_waves = 1;
-        // 将 Q15 输出 sum 映射到 70 像素高度附近（基线 35 像素）
-        int pixel_y = 35 + ( (int64_t)sum * 25 ) / (num_waves * Q15_MAX);
-        wave_data_plot_y[i] = pixel_y;
-    }
-}*/
 
 void update_wave_data_y() {
     // 用 32 位相位的值，从 0 到 2π 对应 0 到 0xFFFFFFFF
@@ -457,13 +437,13 @@ void update_wave_data_y() {
         uint32_t phase = i * phase_inc;
         int32_t sum = 0;
         if (current_waves[0] != 0)
-            sum += fixed_sine(phase) * current_waves[0];
+            sum -= fixed_sine(phase) * current_waves[0];
         if (current_waves[1] != 0)
-            sum += fixed_square(phase) * current_waves[1];
+            sum -= fixed_square(phase) * current_waves[1];
         if (current_waves[2] != 0)
-            sum += fixed_triangle(phase) * current_waves[2];
+            sum -= fixed_triangle(phase) * current_waves[2];
         if (current_waves[3] != 0)
-            sum += fixed_sawtooth(phase) * current_waves[3];
+            sum -= fixed_sawtooth(phase) * current_waves[3];
         int num_waves = 0;
         for (int j = 0; j < 4; j++) {
             num_waves += abs(current_waves[j]);
@@ -747,6 +727,7 @@ int main () {
 
     set_key();
     set_ps2();
+    generate_sine_table();
 
     int mstatus_value, mtvec_value, mie_value;
     mstatus_value = 0b1000;
