@@ -2,6 +2,8 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <math.h>
 
 #pragma region Global Vars
 
@@ -11,11 +13,13 @@
 #define SWITCH_BASE 0xFF200040
 #define TIMER_BASE 0xFF202000
 #define PS2_BASE 0xFF200100
-#define M_PI 3.14159265358979323846264338327950288419716939937510
 #define SIN_IDX 0
 #define SQR_IDX 1
 #define TRI_IDX 2
 #define SAW_IDX 3
+#ifndef M_PI
+#define M_PI 3.14159265358979323846264338327950288419716939937510
+#endif
 
 // Struct definitions
 typedef struct audio_s {
@@ -124,6 +128,7 @@ void draw_keybd();
 void update_keybd(int note_idx);
 void draw_adsr();
 void draw_wave_selection(int x, int y, int width, int height);
+void update_adsr(char changed);
 
 float wave_data_x[140]; // the x-axis for the wave data
 float wave_data_y[140]; // the y-axis for the wave data
@@ -259,12 +264,8 @@ void erase_image_triangle(int x, int y) {
 int main () {
 
     audio_s *audio_ptr = (audio_s *)AUDIO_BASE;
-    parallel_port *key_ptr = (parallel_port *)KEY_BASE;
-    parallel_port *sw_ptr = (parallel_port *)SWITCH_BASE;
-    ps2_port *ps2_ptr = (ps2_port *)PS2_BASE;
 
     // Setup I/O devices to handle interrupts
-    printf("setting up io devices\n");
     set_key();
     set_ps2();
 
@@ -286,7 +287,7 @@ int main () {
     __asm__ volatile ("csrs mie, %0" :: "r"(mie_value)); // set interrupt enables
     __asm__ volatile ("csrs mstatus, %0" :: "r"(mstatus_value)); // enable Nios V interrupts
 
-    printf("finished setting up interrupts\n");
+    // printf("finished setting up interrupts\n");
 
 
     // VGA related codes
@@ -376,7 +377,7 @@ float sawtooth_wave(float phase) {
 }
 
 void handler (void){
-    printf("inside handler\n");
+    // printf("inside handler\n");
     int mcause_value;
     __asm__ volatile ("csrr %0, mcause" : "=r"(mcause_value));
     if (mcause_value == 0x80000012) // KEY port
@@ -395,26 +396,26 @@ void set_key() {
 
 void set_ps2() {
     
-    printf("inside set ps2\n");
+    // printf("inside set ps2\n");
     ps2_port *ps2_ptr = (ps2_port *)PS2_BASE;
-    printf("RI bit after ISR: %d\n", (ps2_ptr->CTRL >> 1) & 1);
+    // printf("RI bit after ISR: %d\n", (ps2_ptr->CTRL >> 1) & 1);
 
     unsigned int data = ps2_ptr->DATA;
-    printf("%d%d\n", (data>>16)&0xFF, data>>24&0xFF);
+    // printf("%d%d\n", (data>>16)&0xFF, data>>24&0xFF);
 
     
-    printf("%d\n", (data & 0x8000) >> 15);
+    // printf("%d\n", (data & 0x8000) >> 15);
     while ((data & 0x8000) != 0) {
         data = ps2_ptr->DATA;
-        printf("word removed\n");
+        // printf("word removed\n");
     }
 
     ps2_ptr->CTRL |= 0x1;
-    printf("RI bit after ISR: %d\n", (ps2_ptr->CTRL >> 1) & 1);
+    // printf("RI bit after ISR: %d\n", (ps2_ptr->CTRL >> 1) & 1);
 }
 
 void key_isr() {
-    printf("inside key isr\n");
+    // printf("inside key isr\n");
     volatile int *key_ptr = (int *) KEY_BASE;
     volatile int *sw_ptr = (int *) SWITCH_BASE;
 
@@ -422,10 +423,10 @@ void key_isr() {
     int key_pressed = *(key_ptr + 3); // read EdgeCapture
     key_pressed &= 0xF;
 
-    printf("The key pressed is %d\n", key_pressed);
+    // printf("The key pressed is %d\n", key_pressed);
 
     if ((sw_state & 0x1) == 0x1) {
-        printf("addition mode code goes here\n");
+        // printf("addition mode code goes here\n");
         if (key_pressed == 1) {
             current_waves[SAW_IDX] += 1;
         } else if (key_pressed == 2) {
@@ -437,7 +438,7 @@ void key_isr() {
         }
         draw_waveform(90, 80, 140, 70);
     } else if (((sw_state >> 1) & 0x1) == 0x1) {
-        printf("subtraction mode code goes here\n");
+        // printf("subtraction mode code goes here\n");
         if (key_pressed == 1) {
             current_waves[SAW_IDX] -= 1;
         } else if (key_pressed == 2) {
@@ -449,7 +450,7 @@ void key_isr() {
         }
         draw_waveform(90, 80, 140, 70);
     } else if (((sw_state >> 2) & 0x1) == 0x1) {
-        printf("attack\n");
+        // printf("attack\n");
         if (key_pressed == 1) { // toggle rate
             fast_knob_change = !fast_knob_change;
         } else if (key_pressed == 2) { // reset value
@@ -465,7 +466,7 @@ void key_isr() {
         }
         update_adsr('a');
     } else if (((sw_state >> 3) & 0x1) == 0x1) {
-        printf("delay\n");
+        // printf("delay\n");
         if (key_pressed == 1) { // toggle rate
             fast_knob_change = !fast_knob_change;
         } else if (key_pressed == 2) { // reset value
@@ -481,7 +482,7 @@ void key_isr() {
         }
         update_adsr('d');
     } else if (((sw_state >> 4) & 0x1) == 0x1) {
-        printf("sustain\n");
+        // printf("sustain\n");
         if (key_pressed == 1) { // toggle rate
             fast_knob_change = !fast_knob_change;
         } else if (key_pressed == 2) { // reset value
@@ -497,7 +498,7 @@ void key_isr() {
         }
         update_adsr('s');
     } else if (((sw_state >> 5) & 0x1) == 0x1) {
-        printf("release\n");
+        // printf("release\n");
         if (key_pressed == 1) { // toggle rate
             fast_knob_change = !fast_knob_change;
         } else if (key_pressed == 2) { // reset value
@@ -524,29 +525,29 @@ void key_isr() {
     }
 
     for (int i = 0; i < 4; i++) {
-        printf("%d ", current_waves[i]);
+        // printf("%d ", current_waves[i]);
     }
-    printf("\n");
+    // printf("\n");
 
     *(key_ptr + 3) = 0xF; // clear EdgeCapture register
 }
 
 void ps2_isr() {
-    printf("inside ps2 isr\n");
+    // printf("inside ps2 isr\n");
     ps2_port *ps2_ptr = (ps2_port *)PS2_BASE;
 
     unsigned int data = ps2_ptr->DATA;
     if ((data & 0x8000) != 0) {
         bool break_code = false;
         uint8_t code = data & 0xFF;
-        printf("Hex: 0x%02X\n", code);
+        // printf("Hex: 0x%02X\n", code);
 
         // Check if break code
         if (code == 0xF0) { 
             data = ps2_ptr->DATA;
             code = data & 0xFF;
             break_code = true;
-            printf("breakcode detected\n");
+            // printf("breakcode detected\n");
         }
 
         for (int idx = 0; idx < 20; idx++) {
@@ -559,12 +560,12 @@ void ps2_isr() {
                     }
                     update_keybd(idx);
                 }
-                printf("note represent by %c is now %d\n", notes[idx].ps2_key, notes[idx].pressed);
+                // printf("note represent by %c is now %d\n", notes[idx].ps2_key, notes[idx].pressed);
             }
         }
 
     }
-    //printf(data);
+    // printf(data);
 }
 
 void update_all_waves() {
@@ -676,7 +677,7 @@ void plot_pixel(int x, int y, short int line_color)
 {
     volatile short int *one_pixel_address;
         
-        one_pixel_address = pixel_buffer_start + (y << 10) + (x << 1);
+        one_pixel_address = (volatile short int *)(pixel_buffer_start + (y << 10) + (x << 1));
         
         *one_pixel_address = line_color;
 }
@@ -734,7 +735,7 @@ void swap(int* x, int* y) {
 }
 
 void wait_for_vsync() {
-    volatile int * pixel_ctrl_ptr = 0xFF203020; // pixel controller
+    volatile int * pixel_ctrl_ptr = (volatile int *)0xFF203020; // pixel controller
     register int status;
 
     *pixel_ctrl_ptr = 1; // start the synchronization process
@@ -788,8 +789,6 @@ void init_wave_data_x() {
 }
 
 void update_wave_data_y() {
-
-    static bool sign[140];
 
     for (int i = 0; i < 140; i++) {
         float phase = wave_data_x[i];
