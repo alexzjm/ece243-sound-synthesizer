@@ -208,7 +208,7 @@ void update_wave(wave_struct *w) {
         } else {
             // Release phase
             w->adsr_stat = 'r';
-            w->adsr_multi -= RELEASE_RATE;
+            w->adsr_multi -= RELEASE_RATE / (release_val + 1);
             if (w->adsr_multi < 0) {
                 w->adsr_multi = 0;
                 w->adsr_stat = 'n';  // Note is fully off
@@ -534,7 +534,7 @@ void draw_adsr() {
     int s_knob_pos = knob_min - ((sustain_val * knob_len) / Q15_MAX);
     fill_rect_noinit(245, s_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
     fill_rect_noinit(245, s_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
-    int r_knob_pos = knob_min - ((release_val * knob_len) / Q15_MAX);
+    int r_knob_pos = knob_min - ((release_val * knob_len) / 10);
     fill_rect_noinit(265, r_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
     fill_rect_noinit(265, r_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
 }
@@ -569,7 +569,7 @@ void update_adsr(char changed) {
         fill_rect_noinit(266, 75, 8, 75, rgb_to_16bit(0, 0, 0));
         fill_rect_noinit(265, 75, 1, 75, rgb_to_16bit(40, 40, 40));
         fill_rect_noinit(274, 75, 1, 75, rgb_to_16bit(40, 40, 40));
-        int r_knob_pos = knob_min - ((release_val * knob_len) / Q15_MAX);
+        int r_knob_pos = knob_min - ((release_val * knob_len) / 10);
         fill_rect_noinit(265, r_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
         fill_rect_noinit(265, r_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
     }
@@ -658,11 +658,15 @@ void key_isr() {
         } else if (key_pressed == 2) {
             attack_val = 10;
         } else if (key_pressed == 4) {
-            if (attack_val - (fast_knob_change ? 2 : 1) >= 0)
-                attack_val -= (fast_knob_change ? 2 : 1);
+            attack_val -= (fast_knob_change ? 2 : 1);
+            if (attack_val < 0) {
+                attack_val = 0;
+            }
         } else if (key_pressed == 8) {
-            if (attack_val + (fast_knob_change ? 2 : 1) <= 10)
-                attack_val += (fast_knob_change ? 2 : 1);
+            attack_val += (fast_knob_change ? 2 : 1);
+            if (attack_val > 10) {
+                attack_val = 10;
+            }
         }
         update_adsr('a');
     } else if (((sw_state >> 3) & 0x1) == 0x1) {
@@ -672,11 +676,15 @@ void key_isr() {
         } else if (key_pressed == 2) {
             decay_val = 5;
         } else if (key_pressed == 4) {
-            if (decay_val - (fast_knob_change ? 2 : 1) >= 0)
-                decay_val -= (fast_knob_change ? 2 : 1);
+            decay_val -= (fast_knob_change ? 2 : 1);
+            if (decay_val < 0) {
+                decay_val = 0;
+            }
         } else if (key_pressed == 8) {
-            if (decay_val + (fast_knob_change ? 2 : 1) <= 10)
-                decay_val += (fast_knob_change ? 2 : 1);
+            decay_val += (fast_knob_change ? 2 : 1);
+            if (decay_val > 10) {
+                decay_val = 10;
+            }
         }
         update_adsr('d');
     } else if (((sw_state >> 4) & 0x1) == 0x1) {
@@ -700,11 +708,15 @@ void key_isr() {
         } else if (key_pressed == 2) {
             release_val = 0;
         } else if (key_pressed == 4) {
-            if (release_val - (fast_knob_change ? 3277 : 655) >= 0)
-                release_val -= (fast_knob_change ? 3277 : 655);
+            release_val -= (fast_knob_change ? 2 : 1);
+            if (release_val < 0) {
+                release_val = 0;
+            }
         } else if (key_pressed == 8) {
-            if (release_val + (fast_knob_change ? 3277 : 655) <= Q15_MAX)
-                release_val += (fast_knob_change ? 3277 : 655);
+            release_val += (fast_knob_change ? 2 : 1);
+            if (release_val > 10) {
+                release_val = 10;
+            }
         }
         update_adsr('r');
     } else {
