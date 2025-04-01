@@ -70,8 +70,8 @@ void erase_image_{img_name}(int x, int y) {{
 
 if __name__ == '__main__':
     convert_img(
-        file_name='images/triangle.png',
-        img_name='triangle',
-        width=50,
-        height=20
+        file_name='images/saw.jpg',
+        img_name='sawtooth',
+        width=30,
+        height=30
     )
