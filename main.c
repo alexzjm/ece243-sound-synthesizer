@@ -183,7 +183,7 @@ bool g_update_canvas = true; // flag to update the canvas
 
 void update_all_waves();
 void update_wave(wave_struct *w);
-int get_all_waves_output();
+uint32_t get_all_waves_output();
 float get_wave_output(wave_struct *w);
 
 #pragma endregion
@@ -340,10 +340,9 @@ int main () {
             //            i, wave_ptr->time, wave_ptr->output, wave_ptr->omega, wave_ptr->period, wave_ptr->is_playing);
             // }
 
-            int output = get_all_waves_output();
+            uint32_t output = get_all_waves_output();
             audio_ptr->LDATA = (int) output;
             audio_ptr->RDATA = (int) output;
-            printf("%d\n", output);
             // printf("output: 0x%X\n", output);
         } else {
             led_ptr->LEDR = 0x2; // turn on the second LED to indicate that the FIFO is empty
@@ -647,13 +646,13 @@ void update_wave(wave_struct *w) {
     w->output *= w->adsr_multi;
 }
 
-int get_all_waves_output() {
+uint32_t get_all_waves_output() {
     float temp_output = 0;
     for (int i=0; i<20; i++) {
         temp_output += get_wave_output(&waves[i]);
     }
 
-    int output = (int) (temp_output * 0x10000000);
+    uint32_t output = (uint32_t) (temp_output * 0x7FFFFFF + 0x7FFFFFFF);
 
     return output;
 }
