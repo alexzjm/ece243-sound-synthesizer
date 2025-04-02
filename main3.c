@@ -152,7 +152,7 @@ int16_t fixed_square(uint32_t phase) {
 }
 
 int16_t fixed_triangle(uint32_t phase) {
-    phase -= 0x40000000UL;
+    phase += 0x40000000UL;
     if (phase < 0x80000000UL) {
         int32_t value = (int32_t)((((uint64_t)phase * (2ULL * Q15_MAX)) >> 31) - Q15_MAX);
         return value;
@@ -496,11 +496,12 @@ void erase_image_triangle(int x, int y) {
 }
 
 void draw_wave_selection(int x, int y, int width, int height) {
-    draw_rect(x, y, width, height, 0xFFFF);
-    plot_image_sine(x + 20, y + 5);
-    plot_image_sawtooth(x + 90, y + 5);
-    plot_image_square(x + 150, y + 5);
-    plot_image_triangle(x + 210, y + 5);
+    // draw_rect(x, y, width, height, 0xFFFF);
+    // fill_rect_noinit(x, y, width, height, rgb_to_16bit(60, 60, 60));
+    plot_image_sine(x + 25, y + 5);
+    plot_image_square(x + 85, y + 5);
+    plot_image_triangle(x + 145, y + 5);
+    plot_image_sawtooth(x + 205, y + 5);
 }
 
 // 为预览绘制波形，全部采用整数运算
@@ -599,6 +600,7 @@ void update_adsr(char changed) {
         fill_rect_noinit(46, 75, 8, 75, rgb_to_16bit(0, 0, 0));
         fill_rect_noinit(45, 75, 1, 75, rgb_to_16bit(40, 40, 40));
         fill_rect_noinit(54, 75, 1, 75, rgb_to_16bit(40, 40, 40));
+        fill_rect_noinit(45, 150, 11, 2, rgb_to_16bit(40, 40, 40));
         int a_knob_pos = knob_min - ((attack_val * knob_len) / 10);
         fill_rect_noinit(45, a_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
         fill_rect_noinit(45, a_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
@@ -606,6 +608,7 @@ void update_adsr(char changed) {
         fill_rect_noinit(66, 75, 8, 75, rgb_to_16bit(0, 0, 0));
         fill_rect_noinit(65, 75, 1, 75, rgb_to_16bit(40, 40, 40));
         fill_rect_noinit(74, 75, 1, 75, rgb_to_16bit(40, 40, 40));
+        fill_rect_noinit(65, 150, 11, 2, rgb_to_16bit(40, 40, 40));
         int d_knob_pos = knob_min - ((decay_val * knob_len) / 10);
         fill_rect_noinit(65, d_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
         fill_rect_noinit(65, d_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
@@ -613,6 +616,7 @@ void update_adsr(char changed) {
         fill_rect_noinit(246, 75, 8, 75, rgb_to_16bit(0, 0, 0));
         fill_rect_noinit(245, 75, 1, 75, rgb_to_16bit(40, 40, 40));
         fill_rect_noinit(254, 75, 1, 75, rgb_to_16bit(40, 40, 40));
+        fill_rect_noinit(245, 150, 11, 2, rgb_to_16bit(40, 40, 40));
         int s_knob_pos = knob_min - ((sustain_val * knob_len) / Q15_MAX);
         fill_rect_noinit(245, s_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
         fill_rect_noinit(245, s_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
@@ -620,6 +624,7 @@ void update_adsr(char changed) {
         fill_rect_noinit(266, 75, 8, 75, rgb_to_16bit(0, 0, 0));
         fill_rect_noinit(265, 75, 1, 75, rgb_to_16bit(40, 40, 40));
         fill_rect_noinit(274, 75, 1, 75, rgb_to_16bit(40, 40, 40));
+        fill_rect_noinit(265, 150, 11, 2, rgb_to_16bit(40, 40, 40));
         int r_knob_pos = knob_min - ((release_val * knob_len) / 10);
         fill_rect_noinit(265, r_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
         fill_rect_noinit(265, r_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
