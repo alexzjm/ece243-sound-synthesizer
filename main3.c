@@ -38,8 +38,9 @@
 #define RELEASE_RATE 100
 
 // 用于 ADSR 控制的全局参数（均为 Q15 表示，1.0=32767）
-int32_t attack_val  = Q15_MAX;      // 初始：1.0
-int32_t decay_val   = Q15_MAX/2;      // 初始：0.5
+// int32_t attack_val  = Q15_MAX;      // 初始：1.0
+int32_t attack_val = 10;
+int32_t decay_val   = 5;      // 初始：0.5
 int32_t sustain_val = Q15_MAX;        // 初始：1.0
 int32_t release_val = 0;              // 初始：0
 bool fast_knob_change = true;
@@ -205,18 +206,40 @@ void update_wave(wave_struct *w) {
             w->output = 0;
             return;
         } else {
-            // release 阶段
+            // Release phase
             w->adsr_stat = 'r';
-            w->adsr_multi -= RELEASE_RATE;
+            w->adsr_multi -= RELEASE_RATE / (release_val + 1);
             if (w->adsr_multi < 0) {
                 w->adsr_multi = 0;
-                w->adsr_stat = 'n';
+                w->adsr_stat = 'n';  // Note is fully off
             }
         }
     }
+
+    // Update ADSR Envelope **BEFORE** computing the waveform
+    if (w->adsr_stat == 'a') {  // Attack phase
+        w->adsr_multi += ATTACK_RATE / (10 - attack_val + 1);
+        if (w->adsr_multi >= Q15_MAX) {
+            w->adsr_multi = Q15_MAX;
+            w->adsr_stat = 'd';  // Move to decay phase
+        }
+    } else if (w->adsr_stat == 'd') {  // Decay phase
+        if (w->adsr_multi > sustain_val) {
+            w->adsr_multi -= DECAY_RATE / (decay_val*2 + 1);
+            if (w->adsr_multi < sustain_val) {
+                w->adsr_multi = sustain_val;
+                w->adsr_stat = 's';  // Move to sustain phase
+            }
+        } else {
+            w->adsr_stat = 's';
+        }
+    }
+
+    // Now compute the waveform sample using the updated ADSR multiplier
     w->phase += w->omega;
     int32_t sample = 0;
     uint32_t phase = w->phase;
+    
     if (current_waves[0] != 0)
         sample += fixed_sine(phase) * current_waves[0];
     if (current_waves[1] != 0)
@@ -225,27 +248,10 @@ void update_wave(wave_struct *w) {
         sample += fixed_triangle(phase) * current_waves[2];
     if (current_waves[3] != 0)
         sample += fixed_sawtooth(phase) * current_waves[3];
-    // 应用包络乘子（Q15 乘 Q15 后除以 Q15_MAX）
+
+    // Apply envelope multiplier (Q15 multiply)
     sample = (int32_t)(((int64_t)sample * w->adsr_multi) / Q15_MAX);
     w->output = sample;
-    
-    if (w->adsr_stat == 'a') {
-        w->adsr_multi += ATTACK_RATE;
-        if (w->adsr_multi >= Q15_MAX) {
-            w->adsr_multi = Q15_MAX;
-            w->adsr_stat = 'd';
-        }
-    } else if (w->adsr_stat == 'd') {
-        if (w->adsr_multi > sustain_val) {
-            w->adsr_multi -= DECAY_RATE;
-            if (w->adsr_multi < sustain_val) {
-                w->adsr_multi = sustain_val;
-                w->adsr_stat = 's';
-            }
-        } else {
-            w->adsr_stat = 's';
-        }
-    }
 }
 
 void update_all_waves() {
@@ -570,16 +576,16 @@ void draw_adsr() {
     fill_rect_noinit(246, 75, 8, 75, rgb_to_16bit(0, 0, 0)); // Sustain
     fill_rect_noinit(266, 75, 8, 75, rgb_to_16bit(0, 0, 0)); // Release
     // 绘制旋钮（注意：attack_val 等为 Q15，转换到像素位置时采用比例换算）
-    int a_knob_pos = knob_min - ((attack_val * knob_len) / Q15_MAX);
+    int a_knob_pos = knob_min - ((attack_val * knob_len) / 10);
     fill_rect_noinit(45, a_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
     fill_rect_noinit(45, a_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
-    int d_knob_pos = knob_min - ((decay_val * knob_len) / Q15_MAX);
+    int d_knob_pos = knob_min - ((decay_val * knob_len) / 10);
     fill_rect_noinit(65, d_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
     fill_rect_noinit(65, d_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
     int s_knob_pos = knob_min - ((sustain_val * knob_len) / Q15_MAX);
     fill_rect_noinit(245, s_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
     fill_rect_noinit(245, s_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
-    int r_knob_pos = knob_min - ((release_val * knob_len) / Q15_MAX);
+    int r_knob_pos = knob_min - ((release_val * knob_len) / 10);
     fill_rect_noinit(265, r_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
     fill_rect_noinit(265, r_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
 }
@@ -589,31 +595,32 @@ void update_adsr(char changed) {
     const int knob_min = 145;
     const int knob_len = 70;
     if (changed == 'a') {
+        printf("updating a\n");
         fill_rect_noinit(46, 75, 8, 75, rgb_to_16bit(0, 0, 0));
         fill_rect_noinit(45, 75, 1, 75, rgb_to_16bit(40, 40, 40));
-        fill_rect_noinit(55, 75, 1, 75, rgb_to_16bit(40, 40, 40));
-        int a_knob_pos = knob_min - ((attack_val * knob_len) / Q15_MAX);
+        fill_rect_noinit(54, 75, 1, 75, rgb_to_16bit(40, 40, 40));
+        int a_knob_pos = knob_min - ((attack_val * knob_len) / 10);
         fill_rect_noinit(45, a_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
         fill_rect_noinit(45, a_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
     } else if (changed == 'd') {
         fill_rect_noinit(66, 75, 8, 75, rgb_to_16bit(0, 0, 0));
         fill_rect_noinit(65, 75, 1, 75, rgb_to_16bit(40, 40, 40));
-        fill_rect_noinit(75, 75, 1, 75, rgb_to_16bit(40, 40, 40));
-        int d_knob_pos = knob_min - ((decay_val * knob_len) / Q15_MAX);
+        fill_rect_noinit(74, 75, 1, 75, rgb_to_16bit(40, 40, 40));
+        int d_knob_pos = knob_min - ((decay_val * knob_len) / 10);
         fill_rect_noinit(65, d_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
         fill_rect_noinit(65, d_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
     } else if (changed == 's') {
         fill_rect_noinit(246, 75, 8, 75, rgb_to_16bit(0, 0, 0));
         fill_rect_noinit(245, 75, 1, 75, rgb_to_16bit(40, 40, 40));
-        fill_rect_noinit(255, 75, 1, 75, rgb_to_16bit(40, 40, 40));
+        fill_rect_noinit(254, 75, 1, 75, rgb_to_16bit(40, 40, 40));
         int s_knob_pos = knob_min - ((sustain_val * knob_len) / Q15_MAX);
         fill_rect_noinit(245, s_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
         fill_rect_noinit(245, s_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
     } else if (changed == 'r') {
         fill_rect_noinit(266, 75, 8, 75, rgb_to_16bit(0, 0, 0));
         fill_rect_noinit(265, 75, 1, 75, rgb_to_16bit(40, 40, 40));
-        fill_rect_noinit(275, 75, 1, 75, rgb_to_16bit(40, 40, 40));
-        int r_knob_pos = knob_min - ((release_val * knob_len) / Q15_MAX);
+        fill_rect_noinit(274, 75, 1, 75, rgb_to_16bit(40, 40, 40));
+        int r_knob_pos = knob_min - ((release_val * knob_len) / 10);
         fill_rect_noinit(265, r_knob_pos + shadow_disp, 10, 2, rgb_to_16bit(60, 60, 60));
         fill_rect_noinit(265, r_knob_pos, 10, 5, rgb_to_16bit(90, 90, 90));
     }
@@ -692,13 +699,17 @@ void key_isr() {
         if (key_pressed == 1) {
             fast_knob_change = !fast_knob_change;
         } else if (key_pressed == 2) {
-            attack_val = Q15_MAX;
+            attack_val = 10;
         } else if (key_pressed == 4) {
-            if (attack_val - (fast_knob_change ? 3277 : 655) >= 0)
-                attack_val -= (fast_knob_change ? 3277 : 655);
+            attack_val -= (fast_knob_change ? 2 : 1);
+            if (attack_val < 0) {
+                attack_val = 0;
+            }
         } else if (key_pressed == 8) {
-            if (attack_val + (fast_knob_change ? 3277 : 655) <= Q15_MAX)
-                attack_val += (fast_knob_change ? 3277 : 655);
+            attack_val += (fast_knob_change ? 2 : 1);
+            if (attack_val > 10) {
+                attack_val = 10;
+            }
         }
         update_adsr('a');
     } else if (((sw_state >> 3) & 0x1) == 0x1) {
@@ -706,13 +717,17 @@ void key_isr() {
         if (key_pressed == 1) {
             fast_knob_change = !fast_knob_change;
         } else if (key_pressed == 2) {
-            decay_val = Q15_MAX/2;
+            decay_val = 5;
         } else if (key_pressed == 4) {
-            if (decay_val - (fast_knob_change ? 3277 : 655) >= 0)
-                decay_val -= (fast_knob_change ? 3277 : 655);
+            decay_val -= (fast_knob_change ? 2 : 1);
+            if (decay_val < 0) {
+                decay_val = 0;
+            }
         } else if (key_pressed == 8) {
-            if (decay_val + (fast_knob_change ? 3277 : 655) <= Q15_MAX)
-                decay_val += (fast_knob_change ? 3277 : 655);
+            decay_val += (fast_knob_change ? 2 : 1);
+            if (decay_val > 10) {
+                decay_val = 10;
+            }
         }
         update_adsr('d');
     } else if (((sw_state >> 4) & 0x1) == 0x1) {
@@ -736,11 +751,15 @@ void key_isr() {
         } else if (key_pressed == 2) {
             release_val = 0;
         } else if (key_pressed == 4) {
-            if (release_val - (fast_knob_change ? 3277 : 655) >= 0)
-                release_val -= (fast_knob_change ? 3277 : 655);
+            release_val -= (fast_knob_change ? 2 : 1);
+            if (release_val < 0) {
+                release_val = 0;
+            }
         } else if (key_pressed == 8) {
-            if (release_val + (fast_knob_change ? 3277 : 655) <= Q15_MAX)
-                release_val += (fast_knob_change ? 3277 : 655);
+            release_val += (fast_knob_change ? 2 : 1);
+            if (release_val > 10) {
+                release_val = 10;
+            }
         }
         update_adsr('r');
     } else {
