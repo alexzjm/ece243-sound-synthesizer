@@ -1,6 +1,6 @@
 INSTALL	:= C:/intelFPGA_lite/23.1std
 
-MAIN	:= main.c
+MAIN	:= main3.c
 HDRS	:= $(MAIN)
 SRCS	:= $(MAIN)
 

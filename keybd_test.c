@@ -1,48 +1,85 @@
-#define PS2_BASE 0xFF200100
+#include <stdint.h>
+#include <stdbool.h>
 
-// Define the global variable declared in the header
-volatile char ps2_keyboard_code = 0;
+#define PS2_BASE  0xFF200100
+#define LED_BASE  0xFF200000
 
-void initPS2Keyboard(void) {
-    volatile int *PS2_ptr = (int *)PS2_BASE;
-    *PS2_ptr = 0xFF;  // Send reset command
+typedef struct {
+    volatile uint32_t DATA;
+    volatile uint32_t CTRL;
+} ps2_t;
+
+typedef struct {
+    volatile uint32_t LEDR;
+} led_t;
+
+ps2_t* ps2 = (ps2_t*) PS2_BASE;
+led_t* led = (led_t*) LED_BASE;
+
+bool got_break = false;
+bool ps2_ready = false;
+
+// 简单延时函数（使用 volatile 防止被优化掉）
+void delay(int loops) {
+    for (volatile int i = 0; i < loops; i++);
 }
 
-char readPS2ScanCode(void) {
-    volatile int *PS2_ptr = (int *)PS2_BASE;
-    int PS2_data = *PS2_ptr;
-    int RVALID = PS2_data & 0x8000;
-    char scanCode = 0;
-    
-    if (RVALID) {
-        // Valid data is available: extract the scan code
-        scanCode = PS2_data & 0xFF;
-        ps2_keyboard_code = scanCode;
-        
-        // If self-test passed (0xAA), send the enable scanning command (0xF4)
-        if (scanCode == 0xAA) {
-            *PS2_ptr = 0xF4;
+// 写命令前检查 ready
+void ps2_wait_ready() {
+    while (ps2->DATA & 0x8000); // bit15=1 表示 data busy
+}
+
+// 发送命令到键盘（带ready检查和延迟）
+void ps2_send_cmd(uint8_t cmd) {
+    ps2_wait_ready();
+    delay(50000); // 防止硬件太快
+    ps2->DATA = cmd;
+}
+
+// 初始化键盘：发送0xFF，等待0xAA，发送0xF4
+void ps2_init_keyboard() {
+    ps2_send_cmd(0xFF);  // Reset command
+
+    // 等待返回0xAA
+    while (1) {
+        if ((ps2->DATA & 0x8000) != 0) {
+            uint8_t code = ps2->DATA & 0xFF;
+            if (code == 0xAA) {
+                led->LEDR = 0x8;  // LED显示：收到0xAA
+                delay(100000);
+                break;
+            }
         }
-        return scanCode;
     }
-    
-    // No valid data available; return 0 (or another code you reserve for “no key”)
-    return 0;
+
+    ps2_send_cmd(0xF4);  // 启用扫描
+    led->LEDR = 0x4;      // LED显示：发送了F4
+    delay(100000);
 }
 
-int get_block_index_from_scan_code(char code) {
-    switch (code) {
-        case 0x16: return 0; // Digit 1
-        case 0x1E: return 1; // Digit 2
-        case 0x26: return 2; // Digit 3
-        case 0x25: return 3; // Digit 4
-        case 0x2E: return 4; // Digit 5
-        case 0x36: return 5; // Digit 6
-        case 0x3D: return 6; // Digit 7
-        case 0x3E: return 7; // Digit 8
-        case 0x46: return 8; // Digit 9
-        case 0x45: return 9; // Digit 0
-        case 0x4D: return 10; // '-' (optional)
-        default:   return -1;
+int main() {
+    ps2_init_keyboard();  // 一开始先初始化
+
+    while (1) {
+        if ((ps2->DATA & 0x8000) != 0) {
+            uint8_t code = ps2->DATA & 0xFF;
+
+            if (code == 0xF0) {
+                // Break code: 下一个字节是释放的键码
+                got_break = true;
+                led->LEDR = 0x4;  // 显示break阶段
+            } else {
+                if (got_break) {
+                    // 刚松开一个键，又按下一个键
+                    led->LEDR = 0x2;  // LED1亮
+                    got_break = false;
+                } else {
+                    // 正常按下
+                    led->LEDR = 0x1;  // LED0亮
+                }
+            }
+        }
     }
+
+    return 0;
 }

@@ -291,6 +291,8 @@ int32_t get_wave_output(wave_struct *w) {
     return w->output;
 }
 
+bool got_break = false;
+
 #pragma endregion
 
 #pragma region VGA Helper
@@ -322,6 +324,54 @@ void fill_background() {
             plot_pixel(x, y, rgb_to_16bit(40, 40, 40));
         }
     }
+}
+
+void delay(int loops) {
+    for (volatile int i = 0; i < loops; i++);
+}
+
+void ps2_wait_ready() {
+    ps2_port* ps2_ptr = (ps2_port*)PS2_BASE;
+    while (ps2_ptr->DATA & 0x8000); // bit15=1 表示 data busy
+}
+
+void ps2_send_cmd(uint8_t cmd) {
+    ps2_port* ps2_ptr = (ps2_port*)PS2_BASE;
+    ps2_wait_ready();
+    delay(50000); // 简单延时防止太快
+    ps2_ptr->DATA = cmd;
+}
+
+void ps2_init_keyboard() {
+    ps2_send_cmd(0xFF);  // Reset
+    ps2_port* ps2_ptr = (ps2_port*)PS2_BASE;
+    led_s* led_ptr = (led_s*)LED_BASE;
+
+    // 等待返回0xAA
+    while (1) {
+        if ((ps2_ptr->DATA & 0x8000) != 0) {
+            uint8_t code = ps2_ptr->DATA & 0xFF;
+            if (code == 0xAA) {
+                led_ptr->LEDR = 0x8;  // 表示收到AA
+                delay(100000);
+                break;
+            }
+        }
+    }
+    ps2_send_cmd(0xF4);  // Enable scanning
+    led_ptr->LEDR = 0x4;  // 表示发送F4成功
+    delay(100000);
+}
+
+void set_ps2() {
+    ps2_port *ps2_ptr = (ps2_port *)PS2_BASE;
+    unsigned int data = ps2_ptr->DATA;
+    while ((data & 0x8000) != 0) {
+        data = ps2_ptr->DATA;
+    }
+    ps2_ptr->CTRL |= 0x1;
+    delay(100000); // 稍等一会再开始初始化
+    ps2_init_keyboard();
 }
 
 void draw_line(int x0, int y0, int x1, int y1, short int line_color) {
@@ -501,7 +551,8 @@ void draw_keybd() {
 
 void update_keybd(int note_idx) {
     for (int rect_idx = 0; rect_idx < notes[note_idx].num_rects; rect_idx++) {
-        if (notes[note_idx].pressed)
+        // if (notes[note_idx].pressed)
+        if (waves[note_idx].is_playing)
             fill_rect(notes[note_idx].rectangles[rect_idx], rgb_to_16bit(255, 182, 80));
         else
             fill_rect(notes[note_idx].rectangles[rect_idx],
@@ -608,14 +659,6 @@ void set_key() {
     *(KEY_ptr + 2) = 0xF;
 }
 
-void set_ps2() {
-    ps2_port *ps2_ptr = (ps2_port *)PS2_BASE;
-    unsigned int data = ps2_ptr->DATA;
-    while ((data & 0x8000) != 0) {
-        data = ps2_ptr->DATA;
-    }
-    ps2_ptr->CTRL |= 0x1;
-}
 
 void key_isr() {
     volatile int *key_ptr = (int *) KEY_BASE;
@@ -712,19 +755,26 @@ void key_isr() {
 }
 
 void ps2_isr() {
+    // printf("ps2_isr\n");
+    // printf("got_break: %d\n", got_break);
     ps2_port *ps2_ptr = (ps2_port *)PS2_BASE;
+    led_s *led_ptr = (led_s *)LED_BASE;
+
     unsigned int data = ps2_ptr->DATA;
     if ((data & 0x8000) != 0) {
-        bool break_code = false;
         uint8_t code = data & 0xFF;
-        if (code == 0xF0) { 
-            data = ps2_ptr->DATA;
-            code = data & 0xFF;
-            break_code = true;
+
+        if (code == 0xF0) {
+            got_break = true;
+            return;
         }
+
+        // 原有音符逻辑不变
         for (int idx = 0; idx < 20; idx++) {
             if (code == notes[idx].code) {
-                notes[idx].pressed = break_code ? false : true;
+                notes[idx].pressed = got_break ? false : true;
+                // printf("key %d got_break: %d pressed: %d is_playing: %d\n",
+                    // idx, got_break, notes[idx].pressed, waves[idx].is_playing);
                 if (waves[idx].is_playing != notes[idx].pressed) {
                     waves[idx].is_playing = notes[idx].pressed;
                     if (waves[idx].is_playing) {
@@ -734,6 +784,14 @@ void ps2_isr() {
                     update_keybd(idx);
                 }
             }
+        }
+
+        // 控制LED状态逻辑
+        if (got_break) {
+            led_ptr->LEDR = 0x2; // LED1亮（松开后又按）
+            got_break = false;
+        } else {
+            led_ptr->LEDR = 0x1; // LED0亮（普通按下）
         }
     }
 }
@@ -745,7 +803,6 @@ void ps2_isr() {
 int main () {
 
     audio_s *audio_ptr = (audio_s *)AUDIO_BASE;
-    led_s *led_ptr = (led_s *)LED_BASE;
 
     set_key();
     set_ps2();
@@ -778,13 +835,12 @@ int main () {
     while (1) {
         bool status = audio_ptr->RALC == 0 || audio_ptr->WSLC == 0;
         if (!status) {
-            led_ptr->LEDR = 0x1;
             update_all_waves();
             uint32_t output = get_all_waves_output();
             audio_ptr->LDATA = output;
             audio_ptr->RDATA = output;
         } else {
-            led_ptr->LEDR = 0x2;
+            ;
         }
         // 如需刷新屏幕，可调用 draw_main_screen();
 
